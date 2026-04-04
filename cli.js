@@ -105,13 +105,31 @@ switch (command) {
 
     const stats = fs.statSync(filePath);
 
+    // Supported file types for import
+    const supportedExtensions = ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env', '.gitignore', '.dockerfile', '.tf', '.hcl', '.nomad', '.nginx', '.apache'];
+    
     if (stats.isDirectory()) {
       const files = [];
       const entries = fs.readdirSync(filePath, { withFileTypes: true, recursive });
 
       for (const entry of entries) {
-        if (entry.isFile() && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
-          files.push(path.join(entry.parentPath || filePath, entry.name));
+        if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          const name = entry.name.toLowerCase();
+          // Check by extension or special filenames (Dockerfile, Makefile, etc.)
+          if (supportedExtensions.includes(ext) || 
+              name === 'dockerfile' || 
+              name === 'makefile' || 
+              name === 'gemfile' ||
+              name === 'rakefile' ||
+              name === 'jenkinsfile' ||
+              name.startsWith('dockerfile.') ||
+              name === '.gitignore' ||
+              name === '.editorconfig' ||
+              name === '.eslintrc' ||
+              name === '.prettierrc') {
+            files.push(path.join(entry.parentPath || filePath, entry.name));
+          }
         }
       }
 
@@ -126,6 +144,22 @@ switch (command) {
 
       console.log(`\nImported ${files.length} files`);
     } else {
+      // Single file import - check extension
+      const ext = path.extname(filePath).toLowerCase();
+      const supportedExtensions = ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env'];
+      const name = path.basename(filePath).toLowerCase();
+      const isSupported = supportedExtensions.includes(ext) || 
+        ['dockerfile', 'makefile', 'gemfile', 'rakefile', 'jenkinsfile'].includes(name) ||
+        name.startsWith('dockerfile.') ||
+        name.startsWith('.') ||  // Hidden config files
+        !ext;  // Files without extension (scripts)
+      
+      if (!isSupported) {
+        console.warn(`⚠️  Warning: File type "${ext || name}" may not be text-based.`);
+        console.warn(`   Supported: .md .txt .js .ts .py .java .go and 50+ more`);
+        console.warn(`   Use at your own risk or convert to text first.`);
+      }
+      
       const content = fs.readFileSync(filePath, 'utf-8');
       const id = makeKey(filePath);
       await engine.storeMemory(id, content, { tags });
@@ -301,6 +335,16 @@ Commands:
   ask <question>                    Ask AI about your memories
   provider                          Show provider configuration
   help                              Show this help
+
+Supported File Types for Import:
+  Documents:  .md .mdx .txt .rst .adoc .tex .csv .tsv .log
+  Code:       .js .ts .jsx .tsx .py .java .go .rs .c .cpp .h
+              .cs .rb .php .swift .kt .scala .r .m .mm .sql
+              .sh .bash .zsh .ps1 .vue .svelte .astro .html
+              .htm .css .scss .sass .less
+  Config:     .json .xml .yaml .yml .ini .conf .cfg .properties
+              .env .tf .hcl Dockerfile Makefile
+  Other:      .gitignore .editorconfig .eslintrc .prettierrc
 
 Environment:
   PROVIDER_TYPE=openai|ollama|gemini  AI provider type
