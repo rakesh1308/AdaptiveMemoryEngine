@@ -21,6 +21,14 @@ import { MemoryEngine } from './src/index.js';
 import { ProviderFactory } from './src/utils/ProviderFactory.js';
 import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
+// PDF support (optional)
+let pdfParse;
+try {
+  pdfParse = await import('pdf-parse/lib/pdf-parse.js').then(m => m.default);
+} catch {
+  pdfParse = null;
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 
@@ -81,6 +89,23 @@ function makeKey(filename) {
     .replace(/^_+|_+$/g, '');
 }
 
+async function extractTextFromFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  
+  // PDF files
+  if (ext === '.pdf') {
+    if (!pdfParse) {
+      throw new Error('PDF parsing not available. Install pdf-parse: npm install pdf-parse');
+    }
+    const buffer = fs.readFileSync(filePath);
+    const data = await pdfParse(buffer);
+    return `PDF: ${path.basename(filePath)}\n\n${data.text}`;
+  }
+  
+  // Text files (default)
+  return fs.readFileSync(filePath, 'utf-8');
+}
+
 function formatMemory(m) {
   const preview = m.content.substring(0, 80).replace(/\n/g, ' ');
   return `• ${m.id}\n  Tags: ${m.tags?.join(', ') || 'none'}\n  ${preview}...`;
@@ -106,7 +131,7 @@ switch (command) {
     const stats = fs.statSync(filePath);
 
     // Supported file types for import
-    const supportedExtensions = ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env', '.gitignore', '.dockerfile', '.tf', '.hcl', '.nomad', '.nginx', '.apache'];
+    const supportedExtensions = ['.md', '.txt', '.pdf', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env'];
     
     if (stats.isDirectory()) {
       const files = [];
@@ -136,10 +161,14 @@ switch (command) {
       console.log(`Found ${files.length} files to import...\n`);
 
       for (const file of files) {
-        const content = fs.readFileSync(file, 'utf-8');
-        const id = makeKey(file);
-        await engine.storeMemory(id, content, { tags });
-        console.log(`✅ ${id}`);
+        try {
+          const content = await extractTextFromFile(file);
+          const id = makeKey(file);
+          await engine.storeMemory(id, content, { tags });
+          console.log(`✅ ${id}`);
+        } catch (err) {
+          console.error(`❌ Failed to import ${file}: ${err.message}`);
+        }
       }
 
       console.log(`\nImported ${files.length} files`);
@@ -160,7 +189,7 @@ switch (command) {
         console.warn(`   Use at your own risk or convert to text first.`);
       }
       
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = await extractTextFromFile(filePath);
       const id = makeKey(filePath);
       await engine.storeMemory(id, content, { tags });
       console.log(`✅ Imported: ${id}`);
@@ -337,7 +366,7 @@ Commands:
   help                              Show this help
 
 Supported File Types for Import:
-  Documents:  .md .mdx .txt .rst .adoc .tex .csv .tsv .log
+  Documents:  .md .mdx .txt .pdf .rst .adoc .tex .csv .tsv .log
   Code:       .js .ts .jsx .tsx .py .java .go .rs .c .cpp .h
               .cs .rb .php .swift .kt .scala .r .m .mm .sql
               .sh .bash .zsh .ps1 .vue .svelte .astro .html
