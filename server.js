@@ -50,6 +50,12 @@ import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ==================== LOG REDIRECT FOR MCP ====================
+// MCP stdio transport requires stdout to be clean JSON only.
+// Redirect all console.log to stderr so logs don't break the protocol.
+const originalLog = console.log;
+console.log = (...args) => console.error(...args);
+
 // ==================== CONFIGURATION ====================
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -449,7 +455,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // ==================== TRANSPORT SETUP ====================
 
+// Restore console.log for SSE mode (HTTP server can use stdout)
 if (TRANSPORT === 'sse') {
+  console.log = originalLog;
   const app = express();
   app.use(express.json({ limit: '50mb' }));
 
