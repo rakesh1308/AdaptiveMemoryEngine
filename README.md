@@ -53,12 +53,16 @@ cp .env.example .env
 
 Add to your MCP settings:
 
+**Windows:**
 ```json
 {
   "mcpServers": {
     "memory": {
-      "command": "node",
-      "args": ["/path/to/AdaptiveMemoryEngine/server.js"],
+      "command": "cmd",
+      "args": [
+        "/c",
+        "cd C:\\path\\to\\AdaptiveMemoryEngine && node server.js"
+      ],
       "env": {
         "OPENAI_API_KEY": "sk-your-key-here",
         "PROVIDER_TYPE": "openai"
@@ -67,6 +71,27 @@ Add to your MCP settings:
   }
 }
 ```
+
+**macOS/Linux:**
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd /path/to/AdaptiveMemoryEngine && node server.js"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "sk-your-key-here",
+        "PROVIDER_TYPE": "openai"
+      }
+    }
+  }
+}
+```
+
+> **Note:** The `cd` command ensures Claude uses the same data directory as the CLI. Without it, Claude would create a separate data folder.
 
 Then ask Claude:
 - "Remember that I prefer TypeScript for new projects"
