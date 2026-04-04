@@ -228,6 +228,7 @@ switch (command) {
       }
 
       console.log(`\nImported ${files.length} files`);
+      process.exit(0);
     } else {
       // Single file import - check extension
       const ext = path.extname(filePath).toLowerCase();
@@ -249,6 +250,7 @@ switch (command) {
       const id = makeKey(filePath);
       await engine.storeMemory(id, content, { tags });
       console.log(`✅ Imported: ${id}`);
+      process.exit(0);
     }
     break;
   }
@@ -262,6 +264,7 @@ switch (command) {
       console.log(formatMemory(m));
       console.log();
     }
+    process.exit(0);
     break;
   }
 
@@ -282,6 +285,7 @@ switch (command) {
       console.log(`• ${r.memory.id} [${r.method}]`);
       console.log(`  ${r.memory.content.substring(0, 100)}...\n`);
     }
+    process.exit(0);
     break;
   }
 
@@ -301,6 +305,7 @@ switch (command) {
     } else {
       console.log('Memory not found');
     }
+    process.exit(0);
     break;
   }
 
@@ -313,6 +318,7 @@ switch (command) {
 
     const result = await engine.deleteMemory(id);
     console.log(result.deleted ? `✅ Deleted: ${id}` : `❌ ${result.error}`);
+    process.exit(0);
     break;
   }
 
@@ -326,6 +332,7 @@ switch (command) {
     console.log(`Average importance: ${stats.avgImportance}`);
     console.log(`Intelligence: ${stats.intelligenceEnabled ? 'ON' : 'OFF'}`);
     console.log(`Storage: ${stats.storage.primary}`);
+    process.exit(0);
     break;
   }
 
@@ -338,12 +345,14 @@ switch (command) {
       ...memories
     }, null, 2));
     console.log(`✅ Exported to ${outputFile}`);
+    process.exit(0);
     break;
   }
 
   case 'snapshot': {
     const snapshotPath = await engine.createSnapshot();
     console.log(`✅ Snapshot: ${snapshotPath}`);
+    process.exit(0);
     break;
   }
 
@@ -359,6 +368,7 @@ switch (command) {
     for (const r of related.slice(1)) {
       console.log(`  • ${r.concept} (${(r.strength * 100).toFixed(0)}%)`);
     }
+    process.exit(0);
     break;
   }
 
@@ -381,6 +391,7 @@ switch (command) {
     console.log(`\nQ: ${question}\n`);
     console.log(answer);
     console.log(`\n---\nSources: ${results.map(r => r.memory.id).join(', ')}`);
+    process.exit(0);
     break;
   }
 
@@ -397,6 +408,7 @@ switch (command) {
     console.log(`\nIntelligence: ${intConfig.type}`);
     console.log(`  Model: ${intConfig.model || intConfig.chatModel || 'default'}`);
     console.log(`  Available: ${intelligenceProvider.isAvailable() ? '✅' : '❌'}`);
+    process.exit(0);
     break;
   }
 
