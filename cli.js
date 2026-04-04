@@ -22,11 +22,12 @@ import { ProviderFactory } from './src/utils/ProviderFactory.js';
 import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
 // PDF support (optional)
-let pdfParse;
+let PDFParser;
 try {
-  pdfParse = await import('pdf-parse/lib/pdf-parse.js').then(m => m.default);
+  const pdfModule = await import('pdf2json');
+  PDFParser = pdfModule.default || pdfModule;
 } catch {
-  pdfParse = null;
+  PDFParser = null;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -94,12 +95,41 @@ async function extractTextFromFile(filePath) {
   
   // PDF files
   if (ext === '.pdf') {
-    if (!pdfParse) {
-      throw new Error('PDF parsing not available. Install pdf-parse: npm install pdf-parse');
+    if (!PDFParser) {
+      throw new Error('PDF parsing not available. Install pdf2json: npm install pdf2json');
     }
-    const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return `PDF: ${path.basename(filePath)}\n\n${data.text}`;
+    
+    return new Promise((resolve, reject) => {
+      const pdfParser = new PDFParser();
+      
+      pdfParser.on('pdfParser_dataError', err => {
+        reject(new Error(`PDF parse error: ${err.parserError}`));
+      });
+      
+      pdfParser.on('pdfParser_dataReady', pdfData => {
+        // Extract text from all pages
+        let text = '';
+        if (pdfData.Pages) {
+          for (const page of pdfData.Pages) {
+            if (page.Texts) {
+              for (const textItem of page.Texts) {
+                if (textItem.R) {
+                  for (const r of textItem.R) {
+                    if (r.T) {
+                      text += decodeURIComponent(r.T) + ' ';
+                    }
+                  }
+                }
+              }
+            }
+            text += '\n\n';
+          }
+        }
+        resolve(`PDF: ${path.basename(filePath)}\n\n${text.trim()}`);
+      });
+      
+      pdfParser.loadPDF(filePath);
+    });
   }
   
   // Text files (default)
@@ -167,7 +197,7 @@ switch (command) {
           await engine.storeMemory(id, content, { tags });
           console.log(`✅ ${id}`);
         } catch (err) {
-          console.error(`❌ Failed to import ${file}: ${err.message}`);
+          console.error(`❌ Failed to import ${path.basename(file)}: ${err.message}`);
         }
       }
 
