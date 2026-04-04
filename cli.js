@@ -153,6 +153,11 @@ switch (command) {
     const filePath = args[0];
     if (!filePath) {
       console.log('Usage: cli.js import <file-or-directory> [--recursive] [--tag tag1,tag2]');
+      console.log('');
+      console.log('Examples:');
+      console.log('  cli.js import ./notes.md');
+      console.log('  cli.js import "C:\\My Documents\\file.md"  <-- Note the quotes for paths with spaces');
+      console.log('  cli.js import ./docs -r --tag work');
       process.exit(1);
     }
 
@@ -162,7 +167,24 @@ switch (command) {
       ? args[tagIndex + 1].split(',').map(t => t.trim())
       : [];
 
-    const stats = fs.statSync(filePath);
+    // Check if file exists
+    let stats;
+    try {
+      stats = fs.statSync(filePath);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        console.error(`❌ File not found: ${filePath}`);
+        // Simple hint - if path looks like it was split
+        const fullCmd = process.argv.slice(2).join(' ');
+        if (fullCmd.includes('import ') && !filePath.includes('.') && args[1] && args[1].includes('.')) {
+          console.error('');
+          console.error('💡 Hint: Your path may contain spaces. Use quotes:');
+          console.error(`   cli.js import "${filePath} ${args.slice(1).join(' ').split(' --')[0]}"`);
+        }
+        process.exit(1);
+      }
+      throw err;
+    }
 
     // Supported file types for import
     const supportedExtensions = ['.md', '.txt', '.pdf', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env'];
