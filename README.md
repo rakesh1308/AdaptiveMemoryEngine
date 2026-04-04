@@ -18,7 +18,7 @@ AdaptiveMemoryEngine is an intelligent memory system that remembers everything y
 | **AI-Powered** | Optional AI features for auto-tagging, Q&A, and summarization. |
 | **Privacy-First** | Run completely offline with local AI models (Ollama). Your data never leaves your machine. |
 | **MCP Native** | Works with Claude Desktop, Cline, and other MCP-compatible tools. |
-| **Multi-Provider** | Use OpenAI, Google Gemini, or local Ollama - your choice. |
+| **Multi-Provider** | Use OpenAI, Google Gemini, Anthropic, or local Ollama — your choice. |
 
 ---
 
@@ -27,16 +27,16 @@ AdaptiveMemoryEngine is an intelligent memory system that remembers everything y
 ### Prerequisites
 
 - **Node.js ≥ 22.0.0** (for built-in SQLite support)
-- An API key from one of:
+- An embedding provider — one of:
   - [OpenAI](https://platform.openai.com/api-keys) (recommended)
   - [Google AI Studio](https://aistudio.google.com/app/apikey)
-  - Or install [Ollama](https://ollama.com) for local/offline use
+  - [Ollama](https://ollama.com) for 100% local/offline use
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/AdaptiveMemoryEngine.git
+git clone https://github.com/rakesh1308/AdaptiveMemoryEngine.git
 cd AdaptiveMemoryEngine
 
 # Install dependencies
@@ -130,9 +130,9 @@ Both CLI and MCP server use the same `DATA_DIR` (default: `./data`). Memories yo
 
 ```
 CLI Import ──┐
-             ├──►  ./data/memories.db  ◄──├──► Claude (MCP)
-MCP Store ───┘         ↑                    │
-                       └────────────────────┘
+             ├──►  ./data/memories.db  ◄──┬──► Claude (MCP)
+MCP Store ───┘                            │
+                 ./data/knowledge-graph.json
 ```
 
 **Example workflow:**
@@ -204,41 +204,26 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## 📖 CLI Commands
 
 ```bash
-# File import (supports 50+ file types!)
-node cli.js import <file-or-directory> [-r] [--tag tag1,tag2]
-
-# Search memories
-node cli.js search <query>
-
-# Ask AI about your memories
-node cli.js ask <question>
-
-# List all memories
-node cli.js list [filter]
-
-# Get specific memory
-node cli.js get <id>
-
-# Query knowledge graph
-node cli.js graph <concept>
-
-# Show statistics
-node cli.js stats
-
-# Create backup
-node cli.js snapshot
-
-# Show provider configuration
-node cli.js provider
+node cli.js import <file-or-directory> [-r] [--tag tag1,tag2]  # Import files
+node cli.js list [filter]                                       # List all memories
+node cli.js search <query>                                      # Semantic + keyword search
+node cli.js get <id>                                            # Get memory by ID
+node cli.js delete <id>                                         # Delete a memory
+node cli.js stats                                               # Show statistics
+node cli.js export [file]                                       # Export memories to JSON
+node cli.js snapshot                                            # Create backup snapshot
+node cli.js graph <concept>                                     # Query knowledge graph
+node cli.js ask <question>                                      # Ask AI about your memories
+node cli.js provider                                            # Show provider configuration
 ```
 
 ### Supported File Types
 
 | Category | Extensions |
 |----------|------------|
-| **Documents** | `.md` `.mdx` `.txt` `.pdf` `.rst` `.csv` `.log` |
-| **Code** | `.js` `.ts` `.py` `.java` `.go` `.rs` `.cpp` `.rb` `.swift` `.kt` and 30+ more |
-| **Config** | `.json` `.yaml` `.xml` `.env` `.tf` `Dockerfile` `Makefile` |
+| **Documents** | `.md` `.mdx` `.txt` `.pdf` `.rst` `.adoc` `.tex` `.csv` `.tsv` `.log` |
+| **Code** | `.js` `.ts` `.jsx` `.tsx` `.py` `.java` `.go` `.rs` `.c` `.cpp` `.h` `.cs` `.rb` `.php` `.swift` `.kt` `.scala` `.r` `.sql` `.sh` `.bash` `.ps1` `.vue` `.svelte` `.html` `.css` `.scss` and more |
+| **Config** | `.json` `.yaml` `.yml` `.xml` `.ini` `.conf` `.env` `Dockerfile` `Makefile` `.gitignore` |
 
 ---
 
@@ -248,13 +233,18 @@ When connected via MCP, Claude can use these tools:
 
 | Tool | Description |
 |------|-------------|
-| `store_memory` | Save content with automatic embeddings & tags |
+| `store_memory` | Save content with automatic embeddings and optional AI auto-tagging |
 | `get_memory` | Retrieve a memory by key |
+| `update_memory` | Update memory content and/or tags |
+| `delete_memory` | Delete a memory |
 | `search` | Semantic + keyword hybrid search |
-| `ask` | Ask questions about your memories (AI answers) |
-| `summarize` | Summarize memories on a topic |
-| `query_graph` | Explore concept relationships |
-| `backup` | Create JSON snapshot |
+| `list_memories` | List all memories, optionally filtered by tag |
+| `ask` | Ask questions about your memories (AI answers if intelligence model is available) |
+| `summarize` | Summarize memories on a topic (AI summary if intelligence model is available) |
+| `query_graph` | Explore concept relationships in the knowledge graph |
+| `get_stats` | Show system statistics |
+| `backup` | Create a JSON snapshot |
+| `get_provider_info` | Show current AI provider configuration |
 
 ---
 
@@ -277,16 +267,21 @@ When connected via MCP, Claude can use these tools:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Design principle:** Embeddings are **mandatory** (every memory is semantically indexed). Intelligence (AI features like `ask`, `summarize`, auto-tagging) is **optional** — the system degrades gracefully to keyword-based results when no intelligence provider is available.
+
 ---
 
 ## ⚙️ Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PROVIDER_TYPE` | ❌ | `openai` | Provider: `openai`, `ollama`, `gemini` |
+| `PROVIDER_TYPE` | ✅ | `openai` | Provider: `openai`, `ollama`, `gemini` |
 | `OPENAI_API_KEY` | If OpenAI | — | OpenAI API key |
 | `OLLAMA_HOST` | If Ollama | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_EMBEDDING_MODEL` | If Ollama | `nomic-embed-text` | Ollama embedding model |
+| `OLLAMA_CHAT_MODEL` | If Ollama | `llama3.2` | Ollama chat model |
 | `GEMINI_API_KEY` | If Gemini | — | Google AI API key |
+| `ANTHROPIC_API_KEY` | If Anthropic | — | Anthropic API key |
 | `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI features |
 | `DATA_DIR` | ❌ | `./data` | Data directory |
 | `TRANSPORT` | ❌ | `stdio` | `stdio` or `sse` |
@@ -320,7 +315,7 @@ Contributions welcome! Areas of interest:
 
 ## 📄 License
 
-MIT © AdaptiveMemoryEngine Contributors
+MIT © Rakesh Sonawane
 
 ---
 

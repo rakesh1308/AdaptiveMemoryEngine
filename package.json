@@ -34,7 +34,7 @@
     "local-ai",
     "privacy"
   ],
-  "author": "Adaptive Memory Team",
+  "author": "Rakesh Sonawane",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
@@ -46,10 +46,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/AdaptiveMemoryEngine.git"
+    "url": "https://github.com/rakesh1308/AdaptiveMemoryEngine.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/AdaptiveMemoryEngine/issues"
+    "url": "https://github.com/rakesh1308/AdaptiveMemoryEngine/issues"
   },
-  "homepage": "https://github.com/yourusername/AdaptiveMemoryEngine#readme"
+  "homepage": "https://github.com/rakesh1308/AdaptiveMemoryEngine#readme"
 }
