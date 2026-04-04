@@ -84,7 +84,7 @@ export class ChunkingStrategies {
     for (const section of sections) {
       if (section.length > maxChunkSize) {
         // Subdivide large sections
-        const subChunks = ChunkStore.fixed(section, { chunkSize: maxChunkSize, overlap: 250 });
+        const subChunks = ChunkingStrategies.fixed(section, { chunkSize: maxChunkSize, overlap: 250 });
         for (const sub of subChunks) {
           chunks.push({ ...sub, index: index++ });
         }
@@ -105,7 +105,7 @@ export class ChunkingStrategies {
    * Hierarchical chunking (parent-child relationships)
    */
   static hierarchical(content, options = {}) {
-    const chunks = ChunkStore.semantic(content, options);
+    const chunks = ChunkingStrategies.semantic(content, options);
     const hierarchy = [];
     let parentStack = [];
     
