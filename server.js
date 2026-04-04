@@ -6,6 +6,26 @@
  *   stdio (default) - For local MCP clients like Claude Desktop
  *   sse             - For remote deployment via HTTP+SSE
  * 
+ * Provider configuration (choose one):
+ *   OpenAI (default):
+ *     OPENAI_API_KEY=sk-...
+ *   
+ *   Ollama (local):
+ *     PROVIDER_TYPE=ollama
+ *     OLLAMA_HOST=http://localhost:11434
+ *     OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+ *     OLLAMA_CHAT_MODEL=llama3.2
+ *   
+ *   Google Gemini:
+ *     PROVIDER_TYPE=gemini
+ *     GEMINI_API_KEY=...
+ *   
+ *   Mixed (Anthropic intelligence + OpenAI embeddings):
+ *     PROVIDER_TYPE=openai
+ *     OPENAI_API_KEY=...
+ *     ANTHROPIC_API_KEY=...
+ *     INTELLIGENCE_PROVIDER=anthropic
+ * 
  * Usage:
  *   node server.js                    # stdio mode
  *   TRANSPORT=sse PORT=3000 node server.js  # SSE mode
@@ -25,7 +45,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { MemoryEngine } from './src/core/MemoryEngine.js';
-import { OpenAIProvider } from './src/utils/OpenAIProvider.js';
+import { ProviderFactory } from './src/utils/ProviderFactory.js';
+import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,26 +54,54 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const TRANSPORT = process.env.TRANSPORT || 'stdio';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
-const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
 
-// ==================== VALIDATION ====================
-if (!OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY is required. Embeddings are mandatory in AdaptiveMemoryEngine.');
-  console.error('   Set it via environment variable: OPENAI_API_KEY=sk-...');
-  process.exit(1);
+// Provider configuration
+const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'openai';
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
+const CHAT_MODEL = process.env.CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
+
+// Optional: Separate intelligence provider
+const INTELLIGENCE_PROVIDER = process.env.INTELLIGENCE_PROVIDER;
+
+// ==================== PROVIDER SETUP ====================
+function createProviders() {
+  // Create embedding provider
+  const embeddingProvider = ProviderFactory.create({
+    type: PROVIDER_TYPE,
+    embeddingModel: EMBEDDING_MODEL,
+    chatModel: CHAT_MODEL
+  });
+
+  if (!embeddingProvider.isAvailable()) {
+    throw new Error(
+      `Provider ${PROVIDER_TYPE} is not available. ` +
+      `Check your configuration and API keys.`
+    );
+  }
+
+  // Intelligence provider (can be same or different)
+  let intelligenceProvider = embeddingProvider;
+  
+  if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
+    if (INTELLIGENCE_PROVIDER === 'anthropic') {
+      intelligenceProvider = new AnthropicProvider({
+        embeddingFallback: embeddingProvider
+      });
+    } else {
+      intelligenceProvider = ProviderFactory.create({ type: INTELLIGENCE_PROVIDER });
+    }
+  }
+
+  return { embeddingProvider, intelligenceProvider };
 }
 
 // ==================== INITIALIZATION ====================
-const embeddingProvider = new OpenAIProvider({
-  apiKey: OPENAI_API_KEY,
-  embeddingModel: OPENAI_EMBEDDING_MODEL,
-  chatModel: OPENAI_CHAT_MODEL
-});
+const { embeddingProvider, intelligenceProvider } = createProviders();
 
-// Intelligence provider is the same instance (can be swapped independently)
-const intelligenceProvider = embeddingProvider;
+console.error(`[AdaptiveMemoryEngine] Provider: ${PROVIDER_TYPE}`);
+if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
+  console.error(`[AdaptiveMemoryEngine] Intelligence: ${INTELLIGENCE_PROVIDER}`);
+}
 
 const engine = new MemoryEngine({
   dataDir: DATA_DIR,
@@ -75,7 +124,7 @@ const server = new Server(
 const toolDefinitions = [
   {
     name: 'store_memory',
-    description: 'Store a memory with automatic embeddings. Auto-tags with AI if intelligence model is available.',
+    description: 'Store a memory with automatic embeddings. Auto-tags with AI if available.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -199,6 +248,11 @@ const toolDefinitions = [
         style: { type: 'string', enum: ['concise', 'detailed', 'beginner'] }
       }
     }
+  },
+  {
+    name: 'get_provider_info',
+    description: 'Get information about the configured AI provider',
+    inputSchema: { type: 'object' }
   }
 ];
 
@@ -311,7 +365,6 @@ const tools = {
   },
 
   smart_search: async (args) => {
-    // Since embeddings are mandatory, smart_search is identical to search
     return tools.search(args);
   },
 
@@ -361,6 +414,24 @@ const tools = {
     const content = memories.map(m => m.content).join('\n\n---\n\n');
     const summary = await intelligenceProvider.synthesize(content, `Summarize in ${style} style`, style);
     return { content: [{ type: 'text', text: `**Summary:**\n\n${summary}` }] };
+  },
+
+  get_provider_info: async () => {
+    const embConfig = embeddingProvider.getConfig?.() || { type: PROVIDER_TYPE };
+    const intConfig = intelligenceProvider.getConfig?.() || { type: INTELLIGENCE_PROVIDER || PROVIDER_TYPE };
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `**AI Provider Configuration**\n\n` +
+              `🧠 Embeddings: ${embConfig.type}\n` +
+              `   Model: ${embConfig.embeddingModel || EMBEDDING_MODEL}\n` +
+              `   Available: ${embeddingProvider.isAvailable() ? '✅' : '❌'}\n\n` +
+              `🤖 Intelligence: ${intConfig.type}\n` +
+              `   Model: ${intConfig.model || intConfig.chatModel || CHAT_MODEL}\n` +
+              `   Available: ${intelligenceProvider.isAvailable() ? '✅' : '❌'}`
+      }]
+    };
   }
 };
 
@@ -424,7 +495,13 @@ if (TRANSPORT === 'sse') {
 
   app.get('/health', (req, res) => {
     const s = engine.getStats();
-    res.json({ status: 'ok', memories: s.totalMemories, concepts: s.totalConcepts, embeddings: s.totalEmbeddings });
+    res.json({ 
+      status: 'ok', 
+      memories: s.totalMemories, 
+      concepts: s.totalConcepts, 
+      embeddings: s.totalEmbeddings,
+      provider: PROVIDER_TYPE
+    });
   });
 
   app.listen(PORT, '0.0.0.0', () => {

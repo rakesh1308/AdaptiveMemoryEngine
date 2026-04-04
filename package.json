@@ -8,6 +8,11 @@
     "adaptive-memory": "./cli.js",
     "ame": "./cli.js"
   },
+  "exports": {
+    ".": "./src/index.js",
+    "./providers": "./src/utils/ProviderFactory.js",
+    "./interfaces": "./src/interfaces/index.js"
+  },
   "scripts": {
     "start": "node server.js",
     "cli": "node cli.js",
@@ -22,7 +27,12 @@
     "sqlite",
     "embeddings",
     "claude",
-    "openai"
+    "openai",
+    "ollama",
+    "gemini",
+    "anthropic",
+    "local-ai",
+    "privacy"
   ],
   "author": "Adaptive Memory Team",
   "license": "MIT",
@@ -32,5 +42,13 @@
   },
   "engines": {
     "node": ">=22.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/AdaptiveMemoryEngine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/AdaptiveMemoryEngine/issues"
+  },
+  "homepage": "https://github.com/yourusername/AdaptiveMemoryEngine#readme"
 }

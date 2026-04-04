@@ -3,31 +3,73 @@
  * AdaptiveMemoryEngine CLI
  * 
  * Import files, manage memories, interact with the system
+ * 
+ * Provider Configuration:
+ *   Set PROVIDER_TYPE environment variable:
+ *     openai (default), ollama, gemini
+ *   
+ *   Or use .env file with provider-specific vars:
+ *     OPENAI_API_KEY=...
+ *     OLLAMA_HOST=http://localhost:11434
+ *     GEMINI_API_KEY=...
  */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { MemoryEngine, OpenAIProvider } from './src/index.js';
+import { MemoryEngine } from './src/index.js';
+import { ProviderFactory } from './src/utils/ProviderFactory.js';
+import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY is required. Set it in your environment.');
-  process.exit(1);
+// Provider setup
+const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'openai';
+const INTELLIGENCE_PROVIDER = process.env.INTELLIGENCE_PROVIDER;
+
+function createProviders() {
+  // Create embedding provider
+  const embeddingProvider = ProviderFactory.create({
+    type: PROVIDER_TYPE,
+    embeddingModel: process.env.EMBEDDING_MODEL || process.env.OPENAI_EMBEDDING_MODEL,
+    chatModel: process.env.CHAT_MODEL || process.env.OPENAI_CHAT_MODEL
+  });
+
+  if (!embeddingProvider.isAvailable()) {
+    console.error(`❌ Provider ${PROVIDER_TYPE} is not available.`);
+    console.error(`   Check your API keys and configuration.`);
+    console.error(`   Provider config:`, embeddingProvider.getConfig?.() || 'N/A');
+    process.exit(1);
+  }
+
+  // Intelligence provider
+  let intelligenceProvider = embeddingProvider;
+  
+  if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
+    if (INTELLIGENCE_PROVIDER === 'anthropic') {
+      intelligenceProvider = new AnthropicProvider({
+        embeddingFallback: embeddingProvider
+      });
+    } else {
+      intelligenceProvider = ProviderFactory.create({ type: INTELLIGENCE_PROVIDER });
+    }
+  }
+
+  return { embeddingProvider, intelligenceProvider };
 }
 
-const embeddingProvider = new OpenAIProvider({
-  apiKey: process.env.OPENAI_API_KEY,
-  embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-  chatModel: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini'
-});
+const { embeddingProvider, intelligenceProvider } = createProviders();
+
+console.error(`[CLI] Provider: ${PROVIDER_TYPE}`);
+if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
+  console.error(`[CLI] Intelligence: ${INTELLIGENCE_PROVIDER}`);
+}
 
 const engine = new MemoryEngine({
   dataDir: DATA_DIR,
   embeddingProvider,
-  intelligenceProvider: embeddingProvider
+  intelligenceProvider
 });
 
 await engine.initialize();
@@ -201,10 +243,50 @@ switch (command) {
     break;
   }
 
+  case 'ask': {
+    const question = args.join(' ');
+    if (!question) {
+      console.log('Usage: cli.js ask <question>');
+      process.exit(1);
+    }
+    
+    const results = await engine.searchMemories(question, { topK: 3, mode: 'hybrid' });
+    if (results.length === 0) {
+      console.log('No relevant memories found.');
+      break;
+    }
+    
+    const context = results.map(r => r.memory.content).join('\n\n---\n\n');
+    const answer = await intelligenceProvider.synthesize(context, question, 'detailed');
+    
+    console.log(`\nQ: ${question}\n`);
+    console.log(answer);
+    console.log(`\n---\nSources: ${results.map(r => r.memory.id).join(', ')}`);
+    break;
+  }
+
+  case 'provider': {
+    const embConfig = embeddingProvider.getConfig?.() || { type: PROVIDER_TYPE };
+    const intConfig = intelligenceProvider.getConfig?.() || { type: INTELLIGENCE_PROVIDER || PROVIDER_TYPE };
+    
+    console.log('\n🤖 Provider Configuration\n');
+    console.log(`Embeddings: ${embConfig.type}`);
+    console.log(`  Model: ${embConfig.embeddingModel || 'default'}`);
+    console.log(`  Available: ${embeddingProvider.isAvailable() ? '✅' : '❌'}`);
+    if (embConfig.baseUrl) console.log(`  URL: ${embConfig.baseUrl}`);
+    
+    console.log(`\nIntelligence: ${intConfig.type}`);
+    console.log(`  Model: ${intConfig.model || intConfig.chatModel || 'default'}`);
+    console.log(`  Available: ${intelligenceProvider.isAvailable() ? '✅' : '❌'}`);
+    break;
+  }
+
   case 'help':
   default:
     console.log(`
 🧠 AdaptiveMemoryEngine CLI
+
+Provider: ${PROVIDER_TYPE}${INTELLIGENCE_PROVIDER ? ` + ${INTELLIGENCE_PROVIDER}` : ''}
 
 Commands:
   import <path> [-r] [--tag t1,t2]  Import file or directory
@@ -216,18 +298,28 @@ Commands:
   export [file]                     Export to JSON
   snapshot                          Create backup
   graph <concept>                   Query knowledge graph
+  ask <question>                    Ask AI about your memories
+  provider                          Show provider configuration
   help                              Show this help
 
 Environment:
-  DATA_DIR=./data                   Data directory
-  OPENAI_API_KEY=sk-...             Required for embeddings
-  OPENAI_CHAT_MODEL=gpt-4o-mini     Optional intelligence model
+  PROVIDER_TYPE=openai|ollama|gemini  AI provider type
+  INTELLIGENCE_PROVIDER=anthropic     Optional separate intelligence provider
+  DATA_DIR=./data                     Data directory
+  OPENAI_API_KEY=...                  OpenAI API key
+  OLLAMA_HOST=http://localhost:11434  Ollama server URL
+  GEMINI_API_KEY=...                  Gemini API key
+  ANTHROPIC_API_KEY=...               Anthropic API key (for intelligence)
 
 Examples:
-  cli.js import notes.md
-  cli.js import ./docs -r --tag documentation
-  cli.js search "javascript"
-  cli.js graph "machine learning"
+  # Use OpenAI (default)
+  OPENAI_API_KEY=sk-... cli.js import notes.md
+
+  # Use local Ollama
+  PROVIDER_TYPE=ollama cli.js import notes.md
+
+  # Use OpenAI embeddings + Anthropic intelligence
+  OPENAI_API_KEY=... ANTHROPIC_API_KEY=... INTELLIGENCE_PROVIDER=anthropic cli.js ask "summarize my notes"
 `);
 }
 

@@ -1,6 +1,13 @@
 /**
  * AdaptiveMemoryEngine
  * Main exports for the memory system
+ * 
+ * Usage:
+ *   import { MemoryEngine, OpenAIProvider } from 'adaptive-memory-engine';
+ *   
+ *   const engine = new MemoryEngine({
+ *     embeddingProvider: new OpenAIProvider({ apiKey: '...' })
+ *   });
  */
 
 // Core
@@ -28,5 +35,17 @@ export { SQLiteBackend } from './storage/backends/SQLiteBackend.js';
 export { EventBus, MemoryEvents } from './infrastructure/EventBus.js';
 export { HealthMonitor, HealthChecks } from './infrastructure/HealthMonitor.js';
 
-// Utils
+// Interfaces
+export { 
+  EmbeddingProvider, 
+  IntelligentProvider,
+  StorageBackend,
+  SearchStrategy 
+} from './interfaces/index.js';
+
+// Providers
 export { OpenAIProvider } from './utils/OpenAIProvider.js';
+export { OllamaProvider } from './utils/OllamaProvider.js';
+export { GeminiProvider } from './utils/GeminiProvider.js';
+export { AnthropicProvider } from './utils/AnthropicProvider.js';
+export { ProviderFactory } from './utils/ProviderFactory.js';

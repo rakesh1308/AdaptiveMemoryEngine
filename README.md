@@ -1,15 +1,29 @@
-# AdaptiveMemoryEngine
+# 🧠 AdaptiveMemoryEngine
 
-An intelligent memory system with **mandatory semantic embeddings**, optional AI enhancement, and native MCP support.
+**Semantic memory for AI assistants. Pluggable, private, and MCP-native.**
 
-## Philosophy
+[![Node Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-- **Embeddings are required**: Every memory is semantically indexed. No fallback to keyword-only search.
-- **Intelligence is optional**: Auto-tagging, natural language answers, and AI-enhanced knowledge graphs require a generative model, but the core system works with embeddings alone.
-- **SQLite only**: Single, reliable storage backend. No JSONL fallback, no migration scripts.
-- **MCP-native**: Built on the official Model Context Protocol SDK. Works locally via `stdio` or remotely via `SSE`.
+AdaptiveMemoryEngine is an intelligent memory system with **mandatory semantic embeddings**, a **knowledge graph**, and **native MCP support**. Unlike other memory systems, it requires embeddings (no keyword-only fallback) and lets you choose any AI provider—including local models via Ollama.
 
-## Quick Start
+---
+
+## ✨ Philosophy
+
+| Principle | Implementation |
+|-----------|---------------|
+| **Embeddings are mandatory** | Every memory is semantically indexed. No keyword-only search fallback. |
+| **Intelligence is optional** | Auto-tagging, Q&A, and summaries use AI only when configured. |
+| **Provider-agnostic** | Use OpenAI, Google Gemini, local Ollama, or mix providers. |
+| **Privacy-first** | Run completely offline with Ollama. Your data never leaves your machine. |
+| **MCP-native** | Built on the official Model Context Protocol. Works with Claude, Cline, etc. |
+
+---
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
 git clone https://github.com/yourusername/AdaptiveMemoryEngine.git
@@ -17,84 +31,87 @@ cd AdaptiveMemoryEngine
 npm install
 ```
 
-Create a `.env` file:
+### Configure
 
 ```bash
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
+# Edit .env with your preferred provider (see Provider Options below)
 ```
 
-Run the MCP server (stdio mode for Claude Desktop, Cline, etc.):
+### Run
 
 ```bash
+# MCP server (stdio mode for Claude Desktop, Cline)
 npm start
-```
 
-Or run in SSE mode for remote deployment:
-
-```bash
+# Or SSE mode for remote access
 TRANSPORT=sse PORT=3000 npm start
+
+# CLI for file imports and management
+node cli.js import ./my-notes.md
+node cli.js search "machine learning"
 ```
 
-## Requirements
+---
 
-| Feature | Requirement | Notes |
-|---------|-------------|-------|
-| Store memory | ✅ Embedding model | `text-embedding-3-small` or compatible |
-| Semantic search | ✅ Embedding model | Always works |
-| Hybrid search | ✅ Embedding model | Combines semantic + keyword |
-| Knowledge graph | ✅ Base system | Regex extraction always works |
-| AI-enhanced graph | ⚠️ Intelligence model | `gpt-4o-mini` or compatible |
-| Auto-tagging | ⚠️ Intelligence model | Generates tags if no tags provided |
-| Ask | ⚠️ Intelligence model | Natural language answers |
-| Summarize | ⚠️ Intelligence model | AI-generated summaries |
+## 🔌 Provider Options
 
-## MCP Tools
+AdaptiveMemoryEngine supports multiple AI providers. Choose based on your priorities:
 
-### Core Tools
-
-- `store_memory` - Save content with tags and embeddings
-- `get_memory` - Retrieve by key
-- `update_memory` - Update content/tags
-- `delete_memory` - Remove a memory
-- `search` - Hybrid semantic + keyword search
-- `list_memories` - List all memories
-- `query_graph` - Explore concept relationships
-- `get_stats` - System overview
-- `backup` - Create JSON snapshot
-
-### AI-Enhanced Tools
-
-- `smart_search` - Alias for `search` (embeddings are mandatory)
-- `ask` - Question answering over memories
-- `summarize` - Summarize memories by query or keys
-
-## CLI Usage
+### Option 1: OpenAI (Recommended)
+Best balance of quality and speed.
 
 ```bash
-# Import files
-node cli.js import notes.md --tag work
-
-# Search
-node cli.js search "distributed systems"
-
-# Get memory
-node cli.js get meeting_notes_jan15
-
-# Query knowledge graph
-node cli.js graph "machine learning"
-
-# Show stats
-node cli.js stats
-
-# Create backup
-node cli.js snapshot
+# .env
+PROVIDER_TYPE=openai
+OPENAI_API_KEY=sk-...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4o-mini
 ```
 
-## Deployment Modes
+### Option 2: Ollama (Local & Private)
+100% offline. No API costs. Your data stays local.
 
-### stdio (Default)
-For local AI assistants. The host spawns the process directly.
+```bash
+# 1. Install Ollama: https://ollama.com
+# 2. Pull models
+ollama pull nomic-embed-text
+ollama pull llama3.2
+
+# 3. Configure
+# .env
+PROVIDER_TYPE=ollama
+OLLAMA_HOST=http://localhost:11434
+```
+
+### Option 3: Google Gemini (Free Tier)
+Generous free tier. Strong multilingual support.
+
+```bash
+# .env
+PROVIDER_TYPE=gemini
+GEMINI_API_KEY=your-key  # Get from https://aistudio.google.com/app/apikey
+```
+
+### Option 4: Mixed Providers
+Use different providers for embeddings vs. intelligence.
+
+```bash
+# OpenAI embeddings + Anthropic intelligence
+# .env
+PROVIDER_TYPE=openai
+OPENAI_API_KEY=sk-...
+INTELLIGENCE_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## 📖 Usage
+
+### As MCP Server (Claude Desktop, Cline)
+
+Add to your MCP settings:
 
 ```json
 {
@@ -103,53 +120,203 @@ For local AI assistants. The host spawns the process directly.
       "command": "node",
       "args": ["/path/to/AdaptiveMemoryEngine/server.js"],
       "env": {
-        "OPENAI_API_KEY": "sk-..."
+        "OPENAI_API_KEY": "sk-...",
+        "PROVIDER_TYPE": "openai"
       }
     }
   }
 }
 ```
 
-### SSE
-For server deployment. Exposes an HTTP+SSE endpoint.
+Then ask Claude:
+- "Store this: Machine learning is a subset of AI..."
+- "Search my memories for distributed systems"
+- "What do I know about Kubernetes?"
+
+### CLI
 
 ```bash
-TRANSPORT=sse PORT=3000 node server.js
+# Import files
+node cli.js import ./notes.md --tag work
+node cli.js import ./docs -r --tag documentation
+
+# Search
+node cli.js search "javascript async patterns"
+
+# Ask AI about your memories
+node cli.js ask "summarize what I know about React"
+
+# Knowledge graph
+node cli.js graph "machine learning"
+
+# Show provider config
+node cli.js provider
 ```
 
-Endpoints:
-- `GET /mcp` - SSE stream
-- `POST /messages?sessionId=...` - Message endpoint
-- `GET /health` - Health check
+### Programmatic (NPM Module)
 
-## Architecture
+```javascript
+import { MemoryEngine, OllamaProvider } from 'adaptive-memory-engine';
+
+const engine = new MemoryEngine({
+  dataDir: './data',
+  embeddingProvider: new OllamaProvider({
+    embeddingModel: 'nomic-embed-text',
+    chatModel: 'llama3.2'
+  })
+});
+
+await engine.initialize();
+
+// Store memory
+await engine.storeMemory('ml_basics', `
+  Machine learning enables computers to learn from data
+  without being explicitly programmed.
+`, { tags: ['ai', 'ml'] });
+
+// Search
+const results = await engine.searchMemories('learning algorithms', {
+  topK: 5,
+  mode: 'hybrid'
+});
+
+// Query knowledge graph
+const related = engine.knowledgeGraph.getRelatedConcepts('machine learning', 2);
+```
+
+---
+
+## 🛠️ MCP Tools
+
+| Tool | Description | Requires Intelligence |
+|------|-------------|----------------------|
+| `store_memory` | Save content with embeddings & auto-tags | Optional |
+| `get_memory` | Retrieve by key | No |
+| `update_memory` | Update content/tags | No |
+| `delete_memory` | Remove a memory | No |
+| `search` | Hybrid semantic + keyword search | No |
+| `list_memories` | List/filter memories | No |
+| `query_graph` | Explore concept relationships | No |
+| `ask` | Natural language Q&A over memories | Yes |
+| `summarize` | AI-generated summaries | Yes |
+| `backup` | Create JSON snapshot | No |
+| `get_provider_info` | Show AI provider config | No |
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  MCP Server (stdio / SSE)               │
-├─────────────────────────────────────────┤
-│  MemoryEngine                           │
-│  ├── SQLiteBackend (storage)            │
-│  ├── VectorStore (embeddings)           │
-│  ├── KnowledgeGraph (concepts)          │
-│  └── MemoryLifecycle (importance/decay) │
-├─────────────────────────────────────────┤
-│  embeddingProvider (required)           │
-│  intelligenceProvider (optional)        │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Server (stdio/SSE)                   │
+├─────────────────────────────────────────────────────────────┤
+│                      MemoryEngine                           │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
+│  │  SQLite     │  │  VectorStore │  │  KnowledgeGraph │    │
+│  │  (storage)  │  │  (embeddings)│  │  (concepts)     │    │
+│  └─────────────┘  └──────────────┘  └─────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│              Pluggable Provider Layer                       │
+│   OpenAI ◄──► Ollama ◄──► Gemini ◄──► Anthropic            │
+│   (embeddings + intelligence)                               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Environment Variables
+---
+
+## 🆚 Comparison with Alternatives
+
+| Feature | AdaptiveMemoryEngine | basic-memory | mem0 | Other MCP Memory |
+|---------|---------------------|--------------|------|------------------|
+| **Embeddings** | ✅ Mandatory | ✅ Yes | ✅ Yes | ⚠️ Optional/No |
+| **Local/Offline** | ✅ Ollama | ❌ No | ❌ No | Rare |
+| **Provider Choice** | ✅ Any (OpenAI, Gemini, Ollama, mix) | ❌ OpenAI only | ❌ Proprietary | Usually OpenAI |
+| **Knowledge Graph** | ✅ Built-in | ❌ No | ❌ No | Rare |
+| **MCP Native** | ✅ Yes | ✅ Yes | ❌ No | Varies |
+| **Storage** | ✅ SQLite | ❌ JSONL | ☁️ Cloud | Varies |
+| **Hybrid Search** | ✅ Semantic + Keyword | ✅ Yes | ✅ Yes | Varies |
+| **Auto-tagging** | ✅ AI-generated | ✅ Yes | ✅ Yes | Varies |
+| **Privacy** | ✅ 100% offline possible | ❌ Cloud | ❌ Cloud | Varies |
+
+### Why AdaptiveMemoryEngine?
+
+vs **basic-memory**:
+- ✅ **Pluggable providers** — Use Ollama, Gemini, or mix providers
+- ✅ **Knowledge graph** — Concept relationships, not just search
+- ✅ **SQLite storage** — Reliable, queryable, no corruption issues
+- ✅ **100% offline capable** — Run locally with Ollama
+
+vs **mem0**:
+- ✅ **Local-first** — Your data stays on your machine
+- ✅ **MCP-native** — Works directly with Claude, Cline
+- ✅ **No cloud dependency** — No accounts, no quotas, no outages
+- ✅ **Open source** — Full control and transparency
+
+vs **Custom JSON/memory MCPs**:
+- ✅ **Mandatory embeddings** — Every memory is semantically indexed
+- ✅ **Intelligence optional** — Core works without AI, enhanced with AI
+- ✅ **Production-ready** — Transaction support, backups, lifecycle management
+
+---
+
+## ⚙️ Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | ✅ Yes | — | API key for embeddings |
-| `OPENAI_EMBEDDING_MODEL` | ❌ No | `text-embedding-3-small` | Embedding model |
-| `OPENAI_CHAT_MODEL` | ❌ No | `gpt-4o-mini` | Intelligence model |
-| `DATA_DIR` | ❌ No | `./data` | Data directory |
-| `TRANSPORT` | ❌ No | `stdio` | `stdio` or `sse` |
-| `PORT` | ❌ No | `3000` | Port for SSE mode |
+| `PROVIDER_TYPE` | ❌ | `openai` | Provider: `openai`, `ollama`, `gemini` |
+| `OPENAI_API_KEY` | If OpenAI | — | OpenAI API key |
+| `OLLAMA_HOST` | If Ollama | `http://localhost:11434` | Ollama server URL |
+| `GEMINI_API_KEY` | If Gemini | — | Google AI API key |
+| `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI features |
+| `DATA_DIR` | ❌ | `./data` | Data directory |
+| `TRANSPORT` | ❌ | `stdio` | `stdio` or `sse` |
+| `PORT` | ❌ | `3000` | Port for SSE mode |
 
-## License
+---
 
-MIT
+## 🧪 Testing
+
+```bash
+# Verify syntax
+node --check server.js
+node --check cli.js
+
+# Test with different providers
+PROVIDER_TYPE=ollama node cli.js stats
+PROVIDER_TYPE=gemini GEMINI_API_KEY=... node cli.js search "test"
+```
+
+---
+
+## 📝 Requirements
+
+- **Node.js ≥ 22.0.0** (for built-in `node:sqlite`)
+- One of:
+  - OpenAI API key, OR
+  - Ollama installed locally, OR
+  - Google Gemini API key
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Areas of interest:
+- Additional AI providers (Cohere, Mistral, etc.)
+- Additional storage backends
+- Performance optimizations
+- Documentation improvements
+
+---
+
+## 📄 License
+
+MIT © AdaptiveMemoryEngine Contributors
+
+---
+
+## 🔗 Links
+
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Ollama](https://ollama.com/)
+- [OpenAI](https://platform.openai.com/)
+- [Google AI Studio](https://aistudio.google.com/)
