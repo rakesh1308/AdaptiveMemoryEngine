@@ -116,7 +116,11 @@ async function extractTextFromFile(filePath) {
                 if (textItem.R) {
                   for (const r of textItem.R) {
                     if (r.T) {
-                      text += decodeURIComponent(r.T) + ' ';
+                      try {
+                        text += decodeURIComponent(r.T) + ' ';
+                      } catch {
+                        text += r.T + ' ';
+                      }
                     }
                   }
                 }
@@ -205,7 +209,7 @@ switch (command) {
     } else {
       // Single file import - check extension
       const ext = path.extname(filePath).toLowerCase();
-      const supportedExtensions = ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env'];
+      const supportedExtensions = ['.md', '.txt', '.pdf', '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.mm', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.yaml', '.yml', '.json', '.xml', '.html', '.htm', '.css', '.scss', '.sass', '.less', '.vue', '.svelte', '.astro', '.mdx', '.rst', '.adoc', '.tex', '.csv', '.tsv', '.log', '.ini', '.conf', '.cfg', '.properties', '.env'];
       const name = path.basename(filePath).toLowerCase();
       const isSupported = supportedExtensions.includes(ext) || 
         ['dockerfile', 'makefile', 'gemfile', 'rakefile', 'jenkinsfile'].includes(name) ||
