@@ -72,29 +72,42 @@ const INTELLIGENCE_PROVIDER = process.env.INTELLIGENCE_PROVIDER;
 // ==================== PROVIDER SETUP ====================
 function createProviders() {
   // Create embedding provider
-  const embeddingProvider = ProviderFactory.create({
-    type: PROVIDER_TYPE,
-    embeddingModel: EMBEDDING_MODEL,
-    chatModel: CHAT_MODEL
-  });
+  let embeddingProvider = null;
+  let intelligenceProvider = null;
+  
+  try {
+    embeddingProvider = ProviderFactory.create({
+      type: PROVIDER_TYPE,
+      embeddingModel: EMBEDDING_MODEL,
+      chatModel: CHAT_MODEL
+    });
 
-  if (!embeddingProvider.isAvailable()) {
-    throw new Error(
-      `Provider ${PROVIDER_TYPE} is not available. ` +
-      `Check your configuration and API keys.`
-    );
+    if (!embeddingProvider.isAvailable()) {
+      console.error(`[Provider] ${PROVIDER_TYPE} is not available - running without AI features`);
+      embeddingProvider = null;
+    }
+  } catch (error) {
+    console.error(`[Provider] Failed to initialize ${PROVIDER_TYPE}: ${error.message}`);
+    embeddingProvider = null;
   }
 
   // Intelligence provider (can be same or different)
-  let intelligenceProvider = embeddingProvider;
-  
-  if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
-    if (INTELLIGENCE_PROVIDER === 'anthropic') {
-      intelligenceProvider = new AnthropicProvider({
-        embeddingFallback: embeddingProvider
-      });
-    } else {
-      intelligenceProvider = ProviderFactory.create({ type: INTELLIGENCE_PROVIDER });
+  if (embeddingProvider) {
+    intelligenceProvider = embeddingProvider;
+    
+    if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
+      try {
+        if (INTELLIGENCE_PROVIDER === 'anthropic') {
+          intelligenceProvider = new AnthropicProvider({
+            embeddingFallback: embeddingProvider
+          });
+        } else {
+          intelligenceProvider = ProviderFactory.create({ type: INTELLIGENCE_PROVIDER });
+        }
+      } catch (error) {
+        console.error(`[Provider] Failed to initialize intelligence provider ${INTELLIGENCE_PROVIDER}: ${error.message}`);
+        intelligenceProvider = embeddingProvider;
+      }
     }
   }
 
@@ -120,13 +133,8 @@ await engine.initialize();
 const stats = engine.getStats();
 console.error(`[AdaptiveMemoryEngine] Initialized: ${stats.totalMemories} memories, ${stats.totalConcepts} concepts`);
 
-// ==================== MCP SERVER ====================
-const server = new Server(
-  { name: 'adaptive-memory-engine', version: '1.0.0' },
-  { capabilities: { tools: {} } }
-);
-
-// Tool definitions
+// ==================== MCP SERVER SETUP ====================
+// Tool definitions (module scope)
 const toolDefinitions = [
   {
     name: 'store_memory',
@@ -441,17 +449,20 @@ const tools = {
   }
 };
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: toolDefinitions
-}));
+// Function to setup server handlers
+function setupServerHandlers(server) {
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: toolDefinitions
+  }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  if (!tools[name]) {
-    throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${name}`);
-  }
-  return await tools[name](args || {});
-});
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    if (!tools[name]) {
+      throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${name}`);
+    }
+    return await tools[name](args || {});
+  });
+}
 
 // ==================== TRANSPORT SETUP ====================
 
@@ -471,6 +482,14 @@ if (TRANSPORT === 'sse') {
       transport.onclose = () => {
         delete transports[sessionId];
       };
+      
+      // Create a new server instance for each connection
+      const server = new Server(
+        { name: 'adaptive-memory-engine', version: '1.0.0' },
+        { capabilities: { tools: {} } }
+      );
+      setupServerHandlers(server);
+      
       await server.connect(transport);
     } catch (error) {
       console.error('SSE error:', error);
@@ -528,6 +547,13 @@ if (TRANSPORT === 'sse') {
     process.exit(0);
   });
 } else {
+  // Create server for stdio mode
+  const server = new Server(
+    { name: 'adaptive-memory-engine', version: '1.0.0' },
+    { capabilities: { tools: {} } }
+  );
+  setupServerHandlers(server);
+  
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[AdaptiveMemoryEngine] Connected via stdio');
