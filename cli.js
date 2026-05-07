@@ -355,6 +355,7 @@ switch (command) {
       console.log('Usage: cli.js import-backup <path-to-jsonl-file>');
       console.log('');
       console.log('Import memories from a JSONL backup/snapshot file.');
+      console.log('Resumable: if the import is interrupted, restarting will skip already-imported memories.');
       console.log('The file should have one JSON object per line with at minimum: { "id": "...", "content": "..." }');
       process.exit(1);
     }
@@ -382,6 +383,11 @@ switch (command) {
 
     console.log(`📦 Found ${memories.length} memories in backup file\n`);
 
+    // Count existing memories before starting
+    const beforeImportCount = engine.memories.size;
+    console.log(`📊 Existing memories in DB: ${beforeImportCount}`);
+    console.log(`ℹ️  Resumable: already-imported memories will be skipped on restart\n`);
+
     let imported = 0;
     let skipped = 0;
     let errors = 0;
@@ -389,9 +395,9 @@ switch (command) {
     for (let i = 0; i < memories.length; i++) {
       const m = memories[i];
       
+      // Skip if already imported (resume support)
       const existing = engine.memories.get(m.id);
       if (existing) {
-        console.log(`⏭️  [${i + 1}/${memories.length}] Skipping (exists): ${m.id}`);
         skipped++;
         continue;
       }
@@ -405,10 +411,13 @@ switch (command) {
         });
         imported++;
         
+        // Show progress every 10 items or on last item
         if (imported % 10 === 0 || i === memories.length - 1) {
-          console.log(`✅ [${i + 1}/${memories.length}] Imported: ${m.id} (${imported} so far)`);
+          const pct = ((i + 1) / memories.length * 100).toFixed(1);
+          console.log(`✅ [${i + 1}/${memories.length}] (${pct}%) Imported ${imported} so far`);
         }
         
+        // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 20));
       } catch (err) {
         errors++;
@@ -417,14 +426,17 @@ switch (command) {
     }
 
     console.log(`\n📊 Import Summary:`);
-    console.log(`   Total in file: ${memories.length}`);
-    console.log(`   Imported: ${imported}`);
-    console.log(`   Skipped (already exist): ${skipped}`);
+    console.log(`   Backup file: ${path.basename(backupFilePath)}`);
+    console.log(`   Total memories in file: ${memories.length}`);
+    console.log(`   Newly imported: ${imported}`);
+    console.log(`   Skipped (already existed): ${skipped}`);
     console.log(`   Errors: ${errors}`);
+    console.log(`   Total in engine now: ${beforeImportCount + imported - (skipped > 0 ? 0 : 0) - errors}`);
 
     const stats = engine.getStats();
     console.log(`\n📊 Engine Stats:`);
     console.log(`   Total memories: ${stats.totalMemories}`);
+    console.log(`   Total embeddings: ${stats.totalEmbeddings}`);
     process.exit(errors > 0 ? 1 : 0);
     break;
   }
