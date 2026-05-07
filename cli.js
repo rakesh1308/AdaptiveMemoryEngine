@@ -349,6 +349,86 @@ switch (command) {
     break;
   }
 
+  case 'import-backup': {
+    const backupFilePath = args[0];
+    if (!backupFilePath) {
+      console.log('Usage: cli.js import-backup <path-to-jsonl-file>');
+      console.log('');
+      console.log('Import memories from a JSONL backup/snapshot file.');
+      console.log('The file should have one JSON object per line with at minimum: { "id": "...", "content": "..." }');
+      process.exit(1);
+    }
+
+    if (!fs.existsSync(backupFilePath)) {
+      console.error(`❌ File not found: ${backupFilePath}`);
+      process.exit(1);
+    }
+
+    // Read JSONL file
+    const raw = fs.readFileSync(backupFilePath, 'utf-8');
+    const lines = raw.split('\n').filter(l => l.trim());
+    
+    const memories = [];
+    for (const line of lines) {
+      try {
+        const m = JSON.parse(line);
+        if (m.id && m.content) {
+          memories.push(m);
+        }
+      } catch (e) {
+        console.error(`⚠️  Skipping invalid JSON line: ${e.message.substring(0, 50)}...`);
+      }
+    }
+
+    console.log(`📦 Found ${memories.length} memories in backup file\n`);
+
+    let imported = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (let i = 0; i < memories.length; i++) {
+      const m = memories[i];
+      
+      const existing = engine.memories.get(m.id);
+      if (existing) {
+        console.log(`⏭️  [${i + 1}/${memories.length}] Skipping (exists): ${m.id}`);
+        skipped++;
+        continue;
+      }
+
+      try {
+        const tags = m.tags || [];
+        await engine.storeMemory(m.id, m.content, { 
+          tags,
+          autoTag: false,
+          source: 'import'
+        });
+        imported++;
+        
+        if (imported % 10 === 0 || i === memories.length - 1) {
+          console.log(`✅ [${i + 1}/${memories.length}] Imported: ${m.id} (${imported} so far)`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 20));
+      } catch (err) {
+        errors++;
+        console.error(`❌ [${i + 1}/${memories.length}] Failed: ${m.id} - ${err.message}`);
+      }
+    }
+
+    console.log(`\n📊 Import Summary:`);
+    console.log(`   Total in file: ${memories.length}`);
+    console.log(`   Imported: ${imported}`);
+    console.log(`   Skipped (already exist): ${skipped}`);
+    console.log(`   Errors: ${errors}`);
+
+    const stats = engine.getStats();
+    console.log(`\n📊 Engine Stats:`);
+    console.log(`   Total memories: ${stats.totalMemories}`);
+    process.exit(errors > 0 ? 1 : 0);
+    break;
+  }
+
   case 'snapshot': {
     const snapshotPath = await engine.createSnapshot();
     console.log(`✅ Snapshot: ${snapshotPath}`);
@@ -428,6 +508,7 @@ Commands:
   stats                             Show statistics
   export [file]                     Export to JSON
   snapshot                          Create backup
+  import-backup <file>              Import memories from JSONL backup file
   graph <concept>                   Query knowledge graph
   ask <question>                    Ask AI about your memories
   provider                          Show provider configuration
