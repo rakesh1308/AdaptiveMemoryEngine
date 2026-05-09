@@ -1,0 +1,15 @@
+[OpenAIProvider] No API key provided - provider unavailable
+[Provider] openai is not available - running without AI features
+[AdaptiveMemoryEngine] Provider: openai
+file:///C:/RAKESH/WORK/MCP_and_AI/MCP/AdaptiveMemoryEngine/src/core/MemoryEngine.js:28
+      throw new Error('[MemoryEngine] embeddingProvider is required. AdaptiveMemoryEngine requires semantic embeddings.');
+            ^
+
+Error: [MemoryEngine] embeddingProvider is required. AdaptiveMemoryEngine requires semantic embeddings.
+    at new MemoryEngine (file:///C:/RAKESH/WORK/MCP_and_AI/MCP/AdaptiveMemoryEngine/src/core/MemoryEngine.js:28:13)
+    at file:///C:/RAKESH/WORK/MCP_and_AI/MCP/AdaptiveMemoryEngine/server.js:127:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0
