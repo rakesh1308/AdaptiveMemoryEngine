@@ -252,7 +252,7 @@ When connected via MCP, Claude can use these tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    MCP Server (stdio/SSE)                   │
+│                    MCP Server (stdio/HTTP)                  │
 │                         or                                  │
 │                        CLI Tool                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -284,8 +284,8 @@ When connected via MCP, Claude can use these tools:
 | `ANTHROPIC_API_KEY` | If Anthropic | — | Anthropic API key |
 | `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI features |
 | `DATA_DIR` | ❌ | `./data` | Data directory |
-| `TRANSPORT` | ❌ | `stdio` | `stdio` or `sse` |
-| `PORT` | ❌ | `3000` | Port for SSE mode |
+| `TRANSPORT` | ❌ | `stdio` | `stdio` or `http` |
+| `PORT` | ❌ | `3000` | Port for HTTP mode |
 
 ---
 

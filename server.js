@@ -3,8 +3,8 @@
  * AdaptiveMemoryEngine MCP Server
  * 
  * Transport modes:
- *   stdio (default) - For local MCP clients like Claude Desktop
- *   sse             - For remote deployment via HTTP+SSE
+ *   stdio (default)        - For local MCP clients like Claude Desktop
+ *   http                   - For remote deployment via Streamable HTTP
  * 
  * Provider configuration (choose one):
  *   OpenAI (default):
@@ -27,13 +27,14 @@
  *     INTELLIGENCE_PROVIDER=anthropic
  * 
  * Usage:
- *   node server.js                    # stdio mode
- *   TRANSPORT=sse PORT=3000 node server.js  # SSE mode
+ *   node server.js                         # stdio mode
+ *   TRANSPORT=http PORT=3000 node server.js  # Streamable HTTP mode
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -43,6 +44,7 @@ import {
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
 
 import { MemoryEngine } from './src/core/MemoryEngine.js';
 import { ProviderFactory } from './src/utils/ProviderFactory.js';
@@ -464,62 +466,130 @@ function setupServerHandlers(server) {
   });
 }
 
+// Create reusable MCP server instance
+function createMcpServer() {
+  const server = new Server(
+    { name: 'adaptive-memory-engine', version: '1.0.0' },
+    { capabilities: { tools: {} } }
+  );
+  setupServerHandlers(server);
+  return server;
+}
+
 // ==================== TRANSPORT SETUP ====================
 
-// Restore console.log for SSE mode (HTTP server can use stdout)
-if (TRANSPORT === 'sse') {
+// Restore console.log for HTTP mode (Express server can use stdout)
+if (TRANSPORT === 'http') {
   console.log = originalLog;
   const app = express();
   app.use(express.json({ limit: '50mb' }));
 
+  // Map to store transports by session ID
   const transports = {};
 
+  // POST handler: JSON-RPC messages (tool calls, initialization, etc.)
+  app.post('/mcp', async (req, res) => {
+    try {
+      const sessionId = req.headers['mcp-session-id'];
+      let transport;
+
+      if (sessionId && transports[sessionId]) {
+        // Reuse existing transport for this session
+        transport = transports[sessionId];
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        // New initialization request - create a new transport
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            console.error(`[Session] Initialized: ${sid}`);
+            transports[sid] = transport;
+          }
+        });
+
+        // Clean up transport when closed
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && transports[sid]) {
+            console.error(`[Session] Closed: ${sid}`);
+            delete transports[sid];
+          }
+        };
+
+        // Connect the transport to the MCP server
+        const server = createMcpServer();
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      } else {
+        // Invalid request - no session ID or not initialization request
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Bad Request: No valid session ID provided'
+          },
+          id: null
+        });
+        return;
+      }
+
+      // Handle request with existing transport
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error('[HTTP] POST /mcp error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error'
+          },
+          id: null
+        });
+      }
+    }
+  });
+
+  // GET handler: SSE stream for streaming responses
   app.get('/mcp', async (req, res) => {
     try {
-      const transport = new SSEServerTransport('/messages', res);
-      const sessionId = transport.sessionId;
-      transports[sessionId] = transport;
-      transport.onclose = () => {
-        delete transports[sessionId];
-      };
-      
-      // Create a new server instance for each connection
-      const server = new Server(
-        { name: 'adaptive-memory-engine', version: '1.0.0' },
-        { capabilities: { tools: {} } }
-      );
-      setupServerHandlers(server);
-      
-      await server.connect(transport);
+      const sessionId = req.headers['mcp-session-id'];
+      if (!sessionId || !transports[sessionId]) {
+        res.status(400).send('Invalid or missing session ID');
+        return;
+      }
+
+      const transport = transports[sessionId];
+      await transport.handleRequest(req, res);
     } catch (error) {
-      console.error('SSE error:', error);
+      console.error('[HTTP] GET /mcp error:', error);
       if (!res.headersSent) {
         res.status(500).send('Error establishing SSE stream');
       }
     }
   });
 
-  app.post('/messages', async (req, res) => {
-    const sessionId = req.query.sessionId;
-    if (!sessionId) {
-      res.status(400).send('Missing sessionId parameter');
-      return;
-    }
-    const transport = transports[sessionId];
-    if (!transport) {
-      res.status(404).send('Session not found');
-      return;
-    }
+  // DELETE handler: Session termination
+  app.delete('/mcp', async (req, res) => {
     try {
-      await transport.handlePostMessage(req, res, req.body);
+      const sessionId = req.headers['mcp-session-id'];
+      if (!sessionId || !transports[sessionId]) {
+        res.status(400).send('Invalid or missing session ID');
+        return;
+      }
+
+      console.error(`[Session] Termination request: ${sessionId}`);
+      const transport = transports[sessionId];
+      await transport.handleRequest(req, res);
     } catch (error) {
-      console.error('Message error:', error);
+      console.error('[HTTP] DELETE /mcp error:', error);
       if (!res.headersSent) {
-        res.status(500).send('Error handling request');
+        res.status(500).send('Error processing session termination');
       }
     }
   });
 
+  // Health endpoint
   app.get('/health', (req, res) => {
     const s = engine.getStats();
     res.json({ 
@@ -532,27 +602,28 @@ if (TRANSPORT === 'sse') {
   });
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[AdaptiveMemoryEngine] SSE server listening on port ${PORT}`);
-    console.log(`  MCP endpoint:  GET  http://localhost:${PORT}/mcp`);
-    console.log(`  Messages:      POST http://localhost:${PORT}/messages?sessionId=<id>`);
+    console.log(`[AdaptiveMemoryEngine] Streamable HTTP server listening on port ${PORT}`);
+    console.log(`  MCP endpoint:  POST http://localhost:${PORT}/mcp`);
+    console.log(`  SSE stream:    GET  http://localhost:${PORT}/mcp`);
+    console.log(`  Session end:   DELETE http://localhost:${PORT}/mcp`);
     console.log(`  Health:        GET  http://localhost:${PORT}/health`);
   });
 
   process.on('SIGINT', async () => {
+    console.log('[AdaptiveMemoryEngine] Shutting down...');
     for (const sessionId in transports) {
       try {
         await transports[sessionId].close();
-      } catch (e) {}
+        delete transports[sessionId];
+      } catch (e) {
+        // Ignore close errors during shutdown
+      }
     }
     process.exit(0);
   });
 } else {
-  // Create server for stdio mode
-  const server = new Server(
-    { name: 'adaptive-memory-engine', version: '1.0.0' },
-    { capabilities: { tools: {} } }
-  );
-  setupServerHandlers(server);
+  // Stdio mode (default)
+  const server = createMcpServer();
   
   const transport = new StdioServerTransport();
   await server.connect(transport);
