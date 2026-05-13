@@ -45,6 +45,39 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'fs';
+
+// Load .env file if it exists (for local development)
+try {
+  const envFile = path.join(__dirname, '.env');
+  const envContent = readFileSync(envFile, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex <= 0) return;
+    
+    const key = trimmed.substring(0, eqIndex).trim();
+    const value = trimmed.substring(eqIndex + 1).trim();
+    
+    // Skip placeholder values - don't override Railway-injected real values
+    const isPlaceholder = value.includes('YOUR-KEY-HERE') || value.includes('****');
+    
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  });
+  console.error('[Config] .env file loaded (if present)');
+} catch (e) {
+  // .env file not found - likely in production (Railway injects env vars)
+}
+
+// Debug: Log environment configuration
+console.error(`[Config] PROVIDER_TYPE: ${process.env.PROVIDER_TYPE || 'not set'}`);
+console.error(`[Config] OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '***' + process.env.OPENAI_API_KEY.slice(-4) : 'not set'}`);
+console.error(`[Config] TRANSPORT: ${process.env.TRANSPORT || 'not set'}`);
+console.error(`[Config] DATA_DIR: ${process.env.DATA_DIR || 'not set'}`);
 
 import { MemoryEngine } from './src/core/MemoryEngine.js';
 import { ProviderFactory } from './src/utils/ProviderFactory.js';
