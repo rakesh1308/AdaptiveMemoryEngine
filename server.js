@@ -517,22 +517,6 @@ if (TRANSPORT === 'http') {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
 
-  // Basic API Key Authentication
-  const MCP_API_KEY = process.env.MCP_API_KEY;
-  if (MCP_API_KEY) {
-    app.use('/mcp', (req, res, next) => {
-      const authHeader = req.headers.authorization;
-      const apiKey = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : req.query.key;
-
-      if (apiKey !== MCP_API_KEY) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid API Key' });
-      }
-      next();
-    });
-    console.log(`[Security] API Key authentication ENABLED for /mcp endpoints`);
-  } else {
-    console.log(`[Security] WARNING: No MCP_API_KEY set. Endpoints are public!`);
-  }
 
   // Map to store transports by session ID
   const transports = {};
