@@ -54,16 +54,16 @@ try {
   envContent.split('\n').forEach(line => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) return;
-    
+
     const eqIndex = trimmed.indexOf('=');
     if (eqIndex <= 0) return;
-    
+
     const key = trimmed.substring(0, eqIndex).trim();
     const value = trimmed.substring(eqIndex + 1).trim();
-    
+
     // Skip placeholder values - don't override Railway-injected real values
     const isPlaceholder = value.includes('YOUR-KEY-HERE') || value.includes('****');
-    
+
     if (!process.env[key]) {
       process.env[key] = value;
     }
@@ -109,7 +109,7 @@ function createProviders() {
   // Create embedding provider
   let embeddingProvider = null;
   let intelligenceProvider = null;
-  
+
   try {
     embeddingProvider = ProviderFactory.create({
       type: PROVIDER_TYPE,
@@ -129,7 +129,7 @@ function createProviders() {
   // Intelligence provider (can be same or different)
   if (embeddingProvider) {
     intelligenceProvider = embeddingProvider;
-    
+
     if (INTELLIGENCE_PROVIDER && INTELLIGENCE_PROVIDER !== PROVIDER_TYPE) {
       try {
         if (INTELLIGENCE_PROVIDER === 'anthropic') {
@@ -468,17 +468,17 @@ const tools = {
   get_provider_info: async () => {
     const embConfig = embeddingProvider.getConfig?.() || { type: PROVIDER_TYPE };
     const intConfig = intelligenceProvider.getConfig?.() || { type: INTELLIGENCE_PROVIDER || PROVIDER_TYPE };
-    
+
     return {
       content: [{
         type: 'text',
         text: `**AI Provider Configuration**\n\n` +
-              `🧠 Embeddings: ${embConfig.type}\n` +
-              `   Model: ${embConfig.embeddingModel || EMBEDDING_MODEL}\n` +
-              `   Available: ${embeddingProvider.isAvailable() ? '✅' : '❌'}\n\n` +
-              `🤖 Intelligence: ${intConfig.type}\n` +
-              `   Model: ${intConfig.model || intConfig.chatModel || CHAT_MODEL}\n` +
-              `   Available: ${intelligenceProvider.isAvailable() ? '✅' : '❌'}`
+          `🧠 Embeddings: ${embConfig.type}\n` +
+          `   Model: ${embConfig.embeddingModel || EMBEDDING_MODEL}\n` +
+          `   Available: ${embeddingProvider.isAvailable() ? '✅' : '❌'}\n\n` +
+          `🤖 Intelligence: ${intConfig.type}\n` +
+          `   Model: ${intConfig.model || intConfig.chatModel || CHAT_MODEL}\n` +
+          `   Available: ${intelligenceProvider.isAvailable() ? '✅' : '❌'}`
       }]
     };
   }
@@ -516,6 +516,23 @@ if (TRANSPORT === 'http') {
   console.log = originalLog;
   const app = express();
   app.use(express.json({ limit: '50mb' }));
+
+  // Basic API Key Authentication
+  const MCP_API_KEY = process.env.MCP_API_KEY;
+  if (MCP_API_KEY) {
+    app.use('/mcp', (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      const apiKey = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : req.query.key;
+
+      if (apiKey !== MCP_API_KEY) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid API Key' });
+      }
+      next();
+    });
+    console.log(`[Security] API Key authentication ENABLED for /mcp endpoints`);
+  } else {
+    console.log(`[Security] WARNING: No MCP_API_KEY set. Endpoints are public!`);
+  }
 
   // Map to store transports by session ID
   const transports = {};
@@ -625,10 +642,10 @@ if (TRANSPORT === 'http') {
   // Health endpoint
   app.get('/health', (req, res) => {
     const s = engine.getStats();
-    res.json({ 
-      status: 'ok', 
-      memories: s.totalMemories, 
-      concepts: s.totalConcepts, 
+    res.json({
+      status: 'ok',
+      memories: s.totalMemories,
+      concepts: s.totalConcepts,
       embeddings: s.totalEmbeddings,
       provider: PROVIDER_TYPE
     });
@@ -657,7 +674,7 @@ if (TRANSPORT === 'http') {
 } else {
   // Stdio mode (default)
   const server = createMcpServer();
-  
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[AdaptiveMemoryEngine] Connected via stdio');
