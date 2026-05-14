@@ -22,6 +22,17 @@ export class SQLiteBackend {
       }
 
       this.db = new DatabaseSync(this.dbPath);
+
+      // Cloud Storage FUSE Compatibility: 
+      // GCS FUSE does not support WAL mode or strict POSIX locking well.
+      try {
+        this.db.exec('PRAGMA journal_mode = DELETE;');
+        this.db.exec('PRAGMA synchronous = NORMAL;');
+        this.db.exec('PRAGMA locking_mode = NORMAL;');
+      } catch (e) {
+        console.error('[SQLite] Failed to set PRAGMAs:', e.message);
+      }
+
       this.isAvailable = true;
 
       this.createSchema();
@@ -274,7 +285,7 @@ export class SQLiteBackend {
     try {
       const row = this.db.prepare('SELECT embedding FROM embeddings WHERE memory_id = ?').get(memoryId);
       if (!row || !row.embedding) return null;
-      
+
       const floatArray = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
       return Array.from(floatArray);
     } catch (err) {
@@ -289,14 +300,14 @@ export class SQLiteBackend {
     try {
       const rows = this.db.prepare('SELECT memory_id, embedding FROM embeddings').all();
       const embeddings = new Map();
-      
+
       for (const row of rows) {
         if (row.embedding) {
           const floatArray = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
           embeddings.set(row.memory_id, Array.from(floatArray));
         }
       }
-      
+
       return embeddings;
     } catch (err) {
       console.error('[SQLite] GetAllEmbeddings error:', err.message);
@@ -310,7 +321,7 @@ export class SQLiteBackend {
     try {
       const memCount = this.db.prepare('SELECT COUNT(*) as count FROM memories').get().count;
       const embCount = this.db.prepare('SELECT COUNT(*) as count FROM embeddings').get().count;
-      
+
       return {
         total: memCount,
         withEmbeddings: embCount
