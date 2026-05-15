@@ -17,10 +17,15 @@ export class SQLiteBackend {
 
   async initialize() {
     try {
+      console.error(`[SQLite] Initializing with dataDir: ${this.dataDir}`);
+      console.error(`[SQLite] Database path: ${this.dbPath}`);
+      
       if (!fs.existsSync(this.dataDir)) {
+        console.error('[SQLite] Data directory does not exist, creating...');
         fs.mkdirSync(this.dataDir, { recursive: true });
       }
 
+      console.error('[SQLite] Opening database...');
       this.db = new DatabaseSync(this.dbPath);
 
       // Cloud Storage FUSE Compatibility: 
@@ -36,7 +41,12 @@ export class SQLiteBackend {
       this.isAvailable = true;
 
       this.createSchema();
-      console.log('[SQLite] Primary storage initialized');
+      console.error('[SQLite] Schema created/verified');
+      
+      // Verify we can read from the database
+      const count = this.db.prepare('SELECT COUNT(*) as count FROM memories').get();
+      console.error(`[SQLite] Database has ${count.count} memories`);
+      
       return true;
     } catch (err) {
       console.error('[SQLite] Initialization failed:', err.message);

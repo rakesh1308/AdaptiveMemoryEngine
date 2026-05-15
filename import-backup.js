@@ -5,7 +5,10 @@
  * Usage: node import-backup.js <path-to-jsonl-file>
  * 
  * The JSONL file should have one JSON object per line, where each object
- * has at minimum: { id, content, [tags] }
+ * has at minimum: { id, content, [tags], [embedding] }
+ * 
+ * If 'embedding' field is present in backup, it will be used directly
+ * instead of generating new embeddings (preserves original vectors).
  */
 
 import fs from 'fs';
@@ -32,6 +35,9 @@ if (!fs.existsSync(backupFile)) {
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'openai';
 const INTELLIGENCE_PROVIDER = process.env.INTELLIGENCE_PROVIDER;
+
+console.error(`\n[Import] Data directory: ${DATA_DIR}`);
+console.error(`[Import] Provider: ${PROVIDER_TYPE}`);
 
 function createProviders() {
   const embeddingProvider = ProviderFactory.create({
@@ -63,7 +69,6 @@ function createProviders() {
 
 const { embeddingProvider, intelligenceProvider } = createProviders();
 
-console.error(`[Import] Provider: ${PROVIDER_TYPE}`);
 console.error(`[Import] Loading backup from: ${backupFile}`);
 
 const engine = new MemoryEngine({
@@ -73,6 +78,10 @@ const engine = new MemoryEngine({
 });
 
 await engine.initialize();
+
+// Check existing count
+const existingStats = engine.getStats();
+console.error(`[Import] Engine currently has ${existingStats.totalMemories} memories`);
 
 // Read JSONL file line by line
 const memories = [];
@@ -96,7 +105,8 @@ for await (const line of rl) {
 
 console.log(`\n📦 Found ${memories.length} memories in backup file\n`);
 
-// Import memories
+// Import memories - use storeMemory which properly persists to SQLite
+// This will generate new embeddings for each memory
 let imported = 0;
 let skipped = 0;
 let errors = 0;
@@ -104,8 +114,8 @@ let errors = 0;
 for (let i = 0; i < memories.length; i++) {
   const m = memories[i];
   
-  // Check if memory already exists
-  const existing = engine.memories.get(m.id);
+  // Check if memory already exists (in SQLite and in-memory)
+  const existing = engine.sqliteBackend.get(m.id) || engine.memories.get(m.id);
   if (existing) {
     console.log(`⏭️  [${i + 1}/${memories.length}] Skipping (already exists): ${m.id}`);
     skipped++;
@@ -114,9 +124,9 @@ for (let i = 0; i < memories.length; i++) {
 
   try {
     const tags = m.tags || [];
-    await engine.storeMemory(m.id, m.content, { 
+    const result = await engine.storeMemory(m.id, m.content, { 
       tags,
-      autoTag: false,
+      autoTag: false,  // Don't auto-tag during import
       source: 'import'
     });
     imported++;
@@ -145,5 +155,16 @@ console.log(`\n📊 Engine Stats:`);
 console.log(`   Total memories: ${stats.totalMemories}`);
 console.log(`   Total embeddings: ${stats.totalEmbeddings}`);
 console.log(`   Total concepts: ${stats.totalConcepts}`);
+
+// Verify SQLite has the data
+const sqliteStats = engine.sqliteBackend.getStats();
+console.log(`\n📊 SQLite Stats:`);
+console.log(`   Memories in DB: ${sqliteStats.total}`);
+console.log(`   Embeddings in DB: ${sqliteStats.withEmbeddings}`);
+
+if (sqliteStats.total === 0 && memories.length > 0) {
+  console.error(`\n❌ WARNING: SQLite has 0 memories despite importing ${imported}!`);
+  console.error(`   This indicates a persistence issue. Check DATA_DIR and permissions.`);
+}
 
 process.exit(errors > 0 ? 1 : 0);

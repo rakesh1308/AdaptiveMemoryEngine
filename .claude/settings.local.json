@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Rakesh-PC/Downloads/**)",
+      "Bash(python -c \":*)",
+      "Bash(pip install:*)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}

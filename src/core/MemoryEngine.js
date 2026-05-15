@@ -76,7 +76,8 @@ export class MemoryEngine {
   async initialize() {
     if (this.initialized) return;
     
-    console.log('[MemoryEngine] Initializing...');
+    console.error('[MemoryEngine] Initializing...');
+    console.error(`[MemoryEngine] Data directory: ${this.dataDir}`);
     
     // Initialize SQLite (required)
     this.sqliteAvailable = await this.sqliteBackend.initialize();
@@ -84,12 +85,19 @@ export class MemoryEngine {
       throw new Error('[MemoryEngine] SQLite initialization failed. SQLite is the only supported storage backend.');
     }
     
+    console.error('[MemoryEngine] SQLite initialized, loading data...');
+    
     // Load from SQLite
     const memories = this.sqliteBackend.getAll();
+    console.error(`[MemoryEngine] SQLite returned ${memories.length} memories`);
+    
     this.memories = new Map(memories.map(m => [m.id, m]));
+    console.error(`[MemoryEngine] In-memory cache has ${this.memories.size} memories`);
     
     // Load embeddings from SQLite
     const embeddings = this.sqliteBackend.getAllEmbeddings();
+    console.error(`[MemoryEngine] SQLite returned ${embeddings.size} embeddings`);
+    
     for (const [id, embedding] of embeddings) {
       this.vectorStore.vectors.set(id, {
         id,
@@ -99,7 +107,7 @@ export class MemoryEngine {
       });
     }
     
-    console.log(`[MemoryEngine] Loaded ${this.memories.size} memories and ${embeddings.size} embeddings from SQLite`);
+    console.error(`[MemoryEngine] Loaded ${this.memories.size} memories and ${embeddings.size} embeddings from SQLite`);
     
     // Common initialization steps
     await this.finishInitialization();
