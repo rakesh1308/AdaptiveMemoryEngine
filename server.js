@@ -149,6 +149,8 @@ function createProviders() {
   return { embeddingProvider, intelligenceProvider };
 }
 
+let engineReady = false;
+
 // ==================== INITIALIZATION ====================
 const { embeddingProvider, intelligenceProvider } = createProviders();
 
@@ -167,6 +169,7 @@ await engine.initialize();
 
 const stats = engine.getStats();
 console.error(`[AdaptiveMemoryEngine] Initialized: ${stats.totalMemories} memories, ${stats.totalConcepts} concepts`);
+engineReady = true;
 
 // ==================== MCP SERVER SETUP ====================
 // Tool definitions (module scope)
