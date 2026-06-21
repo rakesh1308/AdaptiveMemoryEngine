@@ -47,6 +47,8 @@ import { fileURLToPath } from 'url';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'fs';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 // Load .env file if it exists (for local development)
 try {
   const envFile = path.join(__dirname, '.env');
@@ -61,7 +63,7 @@ try {
     const key = trimmed.substring(0, eqIndex).trim();
     const value = trimmed.substring(eqIndex + 1).trim();
 
-    // Skip placeholder values - don't override Railway-injected real values
+    // Skip placeholder values - don't override real values injected by host
     const isPlaceholder = value.includes('YOUR-KEY-HERE') || value.includes('****');
 
     if (!process.env[key]) {
@@ -70,7 +72,7 @@ try {
   });
   console.error('[Config] .env file loaded (if present)');
 } catch (e) {
-  // .env file not found - likely in production (Railway injects env vars)
+  // .env file not found - likely in production (host injects env vars)
 }
 
 // Debug: Log environment configuration
@@ -83,18 +85,30 @@ import { MemoryEngine } from './src/core/MemoryEngine.js';
 import { ProviderFactory } from './src/utils/ProviderFactory.js';
 import { AnthropicProvider } from './src/utils/AnthropicProvider.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 // ==================== LOG REDIRECT FOR MCP ====================
+
 // MCP stdio transport requires stdout to be clean JSON only.
 // Redirect all console.log to stderr so logs don't break the protocol.
 const originalLog = console.log;
 console.log = (...args) => console.error(...args);
 
 // ==================== CONFIGURATION ====================
+// PaaS detection: any platform that injects PORT (Zeabur, Render, Fly, Heroku, etc.)
+// is running behind a network proxy and must use HTTP transport (stdio is local-only).
+const IS_PAAS = !!process.env.PORT;
+
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const TRANSPORT = process.env.TRANSPORT || 'stdio';
+
+// On PaaS with a persistent volume, prefer /data. Override with DATA_DIR if mounted elsewhere.
+// Falls back to local ./data for development.
+const DATA_DIR = process.env.DATA_DIR || (IS_PAAS ? '/data' : path.join(__dirname, 'data'));
+
+// Default to HTTP on PaaS since stdio doesn't work over the network.
+const TRANSPORT = process.env.TRANSPORT || (IS_PAAS ? 'http' : 'stdio');
+
+if (IS_PAAS) {
+  console.error(`[Deploy] PaaS detected: DATA_DIR=${DATA_DIR}, TRANSPORT=${TRANSPORT}, PORT=${PORT}`);
+}
 
 // Provider configuration
 const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'openai';
@@ -626,11 +640,34 @@ if (TRANSPORT === 'http') {
     }
   });
 
-  // Health endpoint
+  // Root endpoint - server info
+  app.get('/', (req, res) => {
+    const s = engine.getStats();
+    res.json({
+      name: 'AdaptiveMemoryEngine',
+      version: '1.0.0',
+      description: 'Semantic memory for AI assistants. MCP-native.',
+      transport: 'http',
+      mcp_endpoint: '/mcp',
+      health_endpoint: '/health',
+      provider: PROVIDER_TYPE,
+      intelligence_provider: INTELLIGENCE_PROVIDER || PROVIDER_TYPE,
+      stats: {
+        memories: s.totalMemories,
+        concepts: s.totalConcepts,
+        embeddings: s.totalEmbeddings,
+        chunks: s.totalChunks
+      },
+      docs: 'https://github.com/rakesh1308/AdaptiveMemoryEngine'
+    });
+  });
+
+  // Health endpoint (used by PaaS healthchecks)
   app.get('/health', (req, res) => {
     const s = engine.getStats();
     res.json({
       status: 'ok',
+      engineReady,
       memories: s.totalMemories,
       concepts: s.totalConcepts,
       embeddings: s.totalEmbeddings,
@@ -638,16 +675,23 @@ if (TRANSPORT === 'http') {
     });
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[AdaptiveMemoryEngine] Streamable HTTP server listening on port ${PORT}`);
     console.log(`  MCP endpoint:  POST http://localhost:${PORT}/mcp`);
     console.log(`  SSE stream:    GET  http://localhost:${PORT}/mcp`);
     console.log(`  Session end:   DELETE http://localhost:${PORT}/mcp`);
     console.log(`  Health:        GET  http://localhost:${PORT}/health`);
+    console.log(`  Info:          GET  http://localhost:${PORT}/`);
   });
 
-  process.on('SIGINT', async () => {
-    console.log('[AdaptiveMemoryEngine] Shutting down...');
+  // Graceful shutdown for both SIGINT (local Ctrl+C) and SIGTERM (PaaS shutdown signal)
+  const shutdown = async (signal) => {
+    console.log(`[AdaptiveMemoryEngine] Received ${signal} - shutting down gracefully...`);
+    // Stop accepting new connections
+    httpServer.close(() => {
+      console.log('[AdaptiveMemoryEngine] HTTP server closed');
+    });
+    // Close all MCP sessions
     for (const sessionId in transports) {
       try {
         await transports[sessionId].close();
@@ -656,8 +700,18 @@ if (TRANSPORT === 'http') {
         // Ignore close errors during shutdown
       }
     }
+    // Close engine (flush SQLite)
+    try {
+      await engine.close?.();
+    } catch (e) {
+      // engine may not have close() - that's fine
+    }
+    console.log('[AdaptiveMemoryEngine] Shutdown complete');
     process.exit(0);
-  });
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 } else {
   // Stdio mode (default)
   const server = createMcpServer();

@@ -1,6 +1,42 @@
+# Dependencies
 node_modules/
+
+# Local data (memories, SQLite DBs, knowledge graph)
 data/
-*.log
-.env
 test-data/
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+dist/
+build/
+coverage/
+
+# Claude worktrees (ephemeral local state, never commit)
+.claude/
+
+# Temporary test artifacts
+*.tmp
+*.bak

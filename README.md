@@ -4,8 +4,99 @@
 
 [![Node Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Deploy on Zeabur](https://img.shields.io/badge/Deploy-Zeabur-7B61FF)](https://zeabur.com)
 
 AdaptiveMemoryEngine is an intelligent memory system that remembers everything you tell it. Unlike simple note-taking apps, it uses **semantic embeddings** to understand the meaning of your content, enabling intelligent search and AI-powered insights.
+
+---
+
+## ☁️ Deploy to Zeabur (One-Click)
+
+The fastest way to get AdaptiveMemoryEngine running as a remote MCP server is to deploy it to [Zeabur](https://zeabur.com).
+
+### Quick Deploy
+
+1. **Click the Zeabur deploy button** (or fork this repo and connect it to Zeabur).
+2. **Set your AI provider key** in Zeabur's Variables tab:
+   - `OPENAI_API_KEY` (recommended) — or `GEMINI_API_KEY`, or set `PROVIDER_TYPE=ollama`
+3. **Wait for the build** to finish. Zeabur will give you a URL like `https://your-app.zeabur.app`.
+4. **Done!** Connect any MCP client to that URL.
+
+Your MCP endpoint will be: **`https://your-app.zeabur.app/mcp`**
+
+Zeabur auto-detects this project as a Node.js app (via `nixpacks.toml` and `Procfile`) and runs `node server.js`. The presence of `PORT` automatically switches the server to HTTP transport — no manual config needed.
+
+### Connecting MCP Clients to Your Zeabur Deployment
+
+Once deployed, connect any MCP-compatible client (Claude Desktop, Cline, custom agents, etc.) to:
+
+```
+https://<your-app>.zeabur.app/mcp
+```
+
+**Example with curl** (initialization):
+```bash
+curl -X POST https://your-app.zeabur.app/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "my-client", "version": "1.0.0"}
+    }
+  }'
+```
+
+The response includes an `mcp-session-id` header — pass it back on subsequent calls.
+
+### Persistent Storage on Zeabur
+
+Zeabur containers are ephemeral by default. To keep your memories across restarts and redeploys:
+
+1. In your Zeabur service, go to the **"Volumes"** tab.
+2. Create a new volume and mount it at `/data`.
+3. Set `DATA_DIR=/data` in your Variables tab (this is the auto-detected default).
+
+Without a Volume, your data is lost on every redeploy — but the engine itself works fine; it just starts empty each time.
+
+### Zeabur Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `OPENAI_API_KEY` | If using OpenAI | — | OpenAI API key |
+| `GEMINI_API_KEY` | If using Gemini | — | Google AI Studio key |
+| `PROVIDER_TYPE` | ❌ | `openai` | `openai`, `ollama`, or `gemini` |
+| `ANTHROPIC_API_KEY` | Optional | — | For `INTELLIGENCE_PROVIDER=anthropic` |
+| `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI chat features |
+| `DATA_DIR` | ❌ | `/data` (auto on PaaS) | Persistent data directory |
+| `PORT` | ❌ | `3000` | Zeabur sets this automatically |
+| `TRANSPORT` | ❌ | `http` (auto on PaaS) | Auto-detected from `PORT` presence |
+
+Zeabur auto-injects `PORT`, so **no manual config is needed** — just add your API key and deploy.
+
+### Monitoring
+
+- **Health check**: `GET https://your-app.zeabur.app/health` — returns 200 OK with stats
+- **Server info**: `GET https://your-app.zeabur.app/` — returns JSON with version, provider, stats
+- **Logs**: Available in the Zeabur dashboard under your service → Logs
+
+### Local Testing Before Deploy
+
+```bash
+# Run the same HTTP server locally
+TRANSPORT=http PORT=3000 node server.js
+
+# Test it
+curl http://localhost:3000/health
+curl http://localhost:3000/
+
+# Use the MCP Inspector to test interactively
+npx @modelcontextprotocol/inspector http://localhost:3000/mcp
+```
 
 ---
 
