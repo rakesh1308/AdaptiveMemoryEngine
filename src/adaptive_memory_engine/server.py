@@ -170,7 +170,17 @@ def serve_stdio(engine: MemoryEngine) -> None:
 def build_http_app(engine: MemoryEngine):
     """Return a Starlette app exposing /mcp (streamable HTTP), /health, /."""
     mcp = _build_mcp_server(engine)
-    base_app = mcp.streamable_http_app()
+    # Disable DNS-rebinding protection by default so the MCP endpoint accepts
+    # requests from arbitrary Host headers (required for PaaS deployments like
+    # Zeabur where the public hostname is not known at build time).
+    # For browser-served MCP you would instead populate
+    # TransportSecuritySettings.allowed_hosts / .allowed_origins.
+    from mcp.server.streamable_http import TransportSecuritySettings
+    base_app = mcp.streamable_http_app(
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        ),
+    )
 
     from starlette.responses import JSONResponse
     from starlette.routing import Route
