@@ -1,42 +1,20 @@
-# Dependencies
-node_modules/
-
-# Local data (memories, SQLite DBs, knowledge graph)
-data/
-test-data/
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-logs/
-
-# Environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
 .env
-.env.local
-.env.*.local
-
-# OS / Editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build output
-dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 build/
-coverage/
-
-# Claude worktrees (ephemeral local state, never commit)
-.claude/
-
-# Temporary test artifacts
-*.tmp
-*.bak
+dist/
+node_modules/
+.DS_Store
+*.log
+.idea/
+.vscode/

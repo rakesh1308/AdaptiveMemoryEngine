@@ -2,101 +2,33 @@
 
 **Semantic memory for AI assistants. Pluggable, private, and MCP-native.**
 
-[![Node Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
+[![Python](https://img.shields.io/badge/python-≥3.11-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io/)
 [![Deploy on Zeabur](https://img.shields.io/badge/Deploy-Zeabur-7B61FF)](https://zeabur.com)
 
 AdaptiveMemoryEngine is an intelligent memory system that remembers everything you tell it. Unlike simple note-taking apps, it uses **semantic embeddings** to understand the meaning of your content, enabling intelligent search and AI-powered insights.
+
+> **Python port** (v2.0) — same data format, same MCP surface, same Zeabur deployment story as the original Node.js version. Existing `memories.db` and `knowledge-graph.json` keep working without migration.
 
 ---
 
 ## ☁️ Deploy to Zeabur (One-Click)
 
-The fastest way to get AdaptiveMemoryEngine running as a remote MCP server is to deploy it to [Zeabur](https://zeabur.com).
-
-### Quick Deploy
-
-1. **Click the Zeabur deploy button** (or fork this repo and connect it to Zeabur).
+1. **Push this repo to GitHub** and connect it to Zeabur.
 2. **Set your AI provider key** in Zeabur's Variables tab:
    - `OPENAI_API_KEY` (recommended) — or `GEMINI_API_KEY`, or set `PROVIDER_TYPE=ollama`
-3. **Wait for the build** to finish. Zeabur will give you a URL like `https://your-app.zeabur.app`.
-4. **Done!** Connect any MCP client to that URL.
+3. **Wait for the build**. Zeabur auto-detects Python via `pyproject.toml`, builds the image, and starts the server.
+4. **Add a persistent Volume** mounted at `/data` so memories survive restarts.
+5. Connect any MCP client to `https://<your-app>.zeabur.app/mcp`.
 
-Your MCP endpoint will be: **`https://your-app.zeabur.app/mcp`**
+`PORT` is auto-injected by Zeabur → transport switches to HTTP automatically.
 
-Zeabur auto-detects this project as a Node.js app (via `nixpacks.toml` and `Procfile`) and runs `node server.js`. The presence of `PORT` automatically switches the server to HTTP transport — no manual config needed.
+### Health & info endpoints
 
-### Connecting MCP Clients to Your Zeabur Deployment
-
-Once deployed, connect any MCP-compatible client (Claude Desktop, Cline, custom agents, etc.) to:
-
-```
-https://<your-app>.zeabur.app/mcp
-```
-
-**Example with curl** (initialization):
-```bash
-curl -X POST https://your-app.zeabur.app/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-      "protocolVersion": "2024-11-05",
-      "capabilities": {},
-      "clientInfo": {"name": "my-client", "version": "1.0.0"}
-    }
-  }'
-```
-
-The response includes an `mcp-session-id` header — pass it back on subsequent calls.
-
-### Persistent Storage on Zeabur
-
-Zeabur containers are ephemeral by default. To keep your memories across restarts and redeploys:
-
-1. In your Zeabur service, go to the **"Volumes"** tab.
-2. Create a new volume and mount it at `/data`.
-3. Set `DATA_DIR=/data` in your Variables tab (this is the auto-detected default).
-
-Without a Volume, your data is lost on every redeploy — but the engine itself works fine; it just starts empty each time.
-
-### Zeabur Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | If using OpenAI | — | OpenAI API key |
-| `GEMINI_API_KEY` | If using Gemini | — | Google AI Studio key |
-| `PROVIDER_TYPE` | ❌ | `openai` | `openai`, `ollama`, or `gemini` |
-| `ANTHROPIC_API_KEY` | Optional | — | For `INTELLIGENCE_PROVIDER=anthropic` |
-| `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI chat features |
-| `DATA_DIR` | ❌ | `/data` (auto on PaaS) | Persistent data directory |
-| `PORT` | ❌ | `3000` | Zeabur sets this automatically |
-| `TRANSPORT` | ❌ | `http` (auto on PaaS) | Auto-detected from `PORT` presence |
-
-Zeabur auto-injects `PORT`, so **no manual config is needed** — just add your API key and deploy.
-
-### Monitoring
-
-- **Health check**: `GET https://your-app.zeabur.app/health` — returns 200 OK with stats
-- **Server info**: `GET https://your-app.zeabur.app/` — returns JSON with version, provider, stats
-- **Logs**: Available in the Zeabur dashboard under your service → Logs
-
-### Local Testing Before Deploy
-
-```bash
-# Run the same HTTP server locally
-TRANSPORT=http PORT=3000 node server.js
-
-# Test it
-curl http://localhost:3000/health
-curl http://localhost:3000/
-
-# Use the MCP Inspector to test interactively
-npx @modelcontextprotocol/inspector http://localhost:3000/mcp
-```
+- `GET https://<your-app>.zeabur.app/health` — `{status, memories, concepts, embeddings, provider}`
+- `GET https://<your-app>.zeabur.app/` — server info + stats
+- `POST https://<your-app>.zeabur.app/mcp` — MCP JSON-RPC
 
 ---
 
@@ -107,9 +39,9 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 | **Semantic Search** | Find memories by meaning, not just keywords. Ask "machine learning" and find "neural networks" content. |
 | **Knowledge Graph** | Automatically builds relationships between concepts in your memories. |
 | **AI-Powered** | Optional AI features for auto-tagging, Q&A, and summarization. |
-| **Privacy-First** | Run completely offline with local AI models (Ollama). Your data never leaves your machine. |
-| **MCP Native** | Works with Claude Desktop, Cline, and other MCP-compatible tools. |
-| **Multi-Provider** | Use OpenAI, Google Gemini, Anthropic, or local Ollama — your choice. |
+| **Privacy-First** | Run completely offline with local AI models (Ollama). |
+| **MCP Native** | Works with Claude Desktop, Cline, and any MCP-compatible tool. |
+| **Multi-Provider** | OpenAI, Google Gemini, Anthropic, or local Ollama. |
 
 ---
 
@@ -117,7 +49,7 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 
 ### Prerequisites
 
-- **Node.js ≥ 22.0.0** (for built-in SQLite support)
+- **Python ≥ 3.11** (3.12 recommended for Zeabur)
 - An embedding provider — one of:
   - [OpenAI](https://platform.openai.com/api-keys) (recommended)
   - [Google AI Studio](https://aistudio.google.com/app/apikey)
@@ -126,34 +58,25 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/rakesh1308/AdaptiveMemoryEngine.git
 cd AdaptiveMemoryEngine
-
-# Install dependencies
-npm install
-
-# Configure your environment
+pip install -e .
 cp .env.example .env
-# Edit .env and add your API key
+# edit .env and add your API key
 ```
 
 ### Usage
 
-#### Option 1: MCP Server (for Claude Desktop, Cline)
+#### Option 1 — MCP server for Claude Desktop, Cline, etc.
 
 Add to your MCP settings:
 
-**Windows:**
 ```json
 {
   "mcpServers": {
     "memory": {
-      "command": "cmd",
-      "args": [
-        "/c",
-        "cd C:\\path\\to\\AdaptiveMemoryEngine && node server.js"
-      ],
+      "command": "python",
+      "args": ["-m", "adaptive_memory_engine", "serve"],
       "env": {
         "OPENAI_API_KEY": "sk-your-key-here",
         "PROVIDER_TYPE": "openai"
@@ -162,195 +85,67 @@ Add to your MCP settings:
   }
 }
 ```
-
-**macOS/Linux:**
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "bash",
-      "args": [
-        "-c",
-        "cd /path/to/AdaptiveMemoryEngine && node server.js"
-      ],
-      "env": {
-        "OPENAI_API_KEY": "sk-your-key-here",
-        "PROVIDER_TYPE": "openai"
-      }
-    }
-  }
-}
-```
-
-> **Note:** The `cd` command ensures Claude uses the same data directory as the CLI. Without it, Claude would create a separate data folder.
 
 Then ask Claude:
 - "Remember that I prefer TypeScript for new projects"
 - "What do I know about distributed systems?"
 - "Summarize my notes on machine learning"
 
-#### Option 2: CLI
+#### Option 2 — CLI
 
 ```bash
 # Set your API key
-export OPENAI_API_KEY="sk-your-key-here"  # Linux/Mac
-# or
-set OPENAI_API_KEY=sk-your-key-here       # Windows
+export OPENAI_API_KEY="sk-your-key-here"
 
 # Import files
-node cli.js import ./notes.md --tag work
-node cli.js import ./docs -r --tag documentation
+python -m adaptive_memory_engine import ./notes.md --tag work
+python -m adaptive_memory_engine import ./docs -r --tag documentation
 
-# Search your memories
-node cli.js search "javascript async patterns"
+# Search
+python -m adaptive_memory_engine search "javascript async patterns"
 
-# Ask AI about your memories
-node cli.js ask "what projects have I documented?"
+# Ask AI
+python -m adaptive_memory_engine ask "what projects have I documented?"
 
 # Query knowledge graph
-node cli.js graph "machine learning"
+python -m adaptive_memory_engine graph "machine learning"
 ```
 
 ---
 
-## 📁 Data Sharing Between CLI and MCP
+## 🛠 MCP Tools (13 tools, identical to v1)
 
-**Yes, CLI and Claude share the same memories!**
-
-Both CLI and MCP server use the same `DATA_DIR` (default: `./data`). Memories you import via CLI are immediately available to Claude, and vice versa.
-
-```
-CLI Import ──┐
-             ├──►  ./data/memories.db  ◄──┬──► Claude (MCP)
-MCP Store ───┘                            │
-                 ./data/knowledge-graph.json
-```
-
-**Example workflow:**
-```bash
-# 1. Import documents via CLI
-node cli.js import ./project-docs --tag myproject
-
-# 2. Ask Claude about them (in Claude Desktop)
-# "What documentation do I have for myproject?"
-
-# 3. Claude finds and uses the memories you just imported
-```
-
----
-
-## 🔌 Provider Configuration
-
-Choose your AI provider based on your needs:
-
-### OpenAI (Recommended)
-Best balance of quality and speed.
-
-```bash
-# .env
-PROVIDER_TYPE=openai
-OPENAI_API_KEY=sk-...
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_CHAT_MODEL=gpt-4o-mini
-```
-
-### Ollama (Local & Private)
-100% offline. No API costs. Your data stays local.
-
-```bash
-# 1. Install Ollama: https://ollama.com
-# 2. Pull models
-ollama pull nomic-embed-text
-ollama pull llama3.2
-
-# 3. Configure
-# .env
-PROVIDER_TYPE=ollama
-OLLAMA_HOST=http://localhost:11434
-```
-
-### Google Gemini (Free Tier)
-Generous free tier. Strong multilingual support.
-
-```bash
-# .env
-PROVIDER_TYPE=gemini
-GEMINI_API_KEY=your-key
-```
-
-### Mixed Providers
-Use different providers for embeddings vs. intelligence.
-
-```bash
-# OpenAI embeddings + Anthropic intelligence
-# .env
-PROVIDER_TYPE=openai
-OPENAI_API_KEY=sk-...
-INTELLIGENCE_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
----
-
-## 📖 CLI Commands
-
-```bash
-node cli.js import <file-or-directory> [-r] [--tag tag1,tag2]  # Import files
-node cli.js list [filter]                                       # List all memories
-node cli.js search <query>                                      # Semantic + keyword search
-node cli.js get <id>                                            # Get memory by ID
-node cli.js delete <id>                                         # Delete a memory
-node cli.js stats                                               # Show statistics
-node cli.js export [file]                                       # Export memories to JSON
-node cli.js snapshot                                            # Create backup snapshot
-node cli.js graph <concept>                                     # Query knowledge graph
-node cli.js ask <question>                                      # Ask AI about your memories
-node cli.js provider                                            # Show provider configuration
-```
-
-### Supported File Types
-
-| Category | Extensions |
-|----------|------------|
-| **Documents** | `.md` `.mdx` `.txt` `.pdf` `.rst` `.adoc` `.tex` `.csv` `.tsv` `.log` |
-| **Code** | `.js` `.ts` `.jsx` `.tsx` `.py` `.java` `.go` `.rs` `.c` `.cpp` `.h` `.cs` `.rb` `.php` `.swift` `.kt` `.scala` `.r` `.sql` `.sh` `.bash` `.ps1` `.vue` `.svelte` `.html` `.css` `.scss` and more |
-| **Config** | `.json` `.yaml` `.yml` `.xml` `.ini` `.conf` `.env` `Dockerfile` `Makefile` `.gitignore` |
-
----
-
-## 🛠️ MCP Tools (for AI Assistants)
-
-When connected via MCP, Claude can use these tools:
+When connected via MCP, clients can use:
 
 | Tool | Description |
 |------|-------------|
 | `store_memory` | Save content with automatic embeddings and optional AI auto-tagging |
 | `get_memory` | Retrieve a memory by key |
-| `update_memory` | Update memory content and/or tags |
-| `delete_memory` | Delete a memory |
-| `search` | Semantic + keyword hybrid search |
-| `list_memories` | List all memories, optionally filtered by tag |
-| `ask` | Ask questions about your memories (AI answers if intelligence model is available) |
-| `summarize` | Summarize memories on a topic (AI summary if intelligence model is available) |
-| `query_graph` | Explore concept relationships in the knowledge graph |
-| `get_stats` | Show system statistics |
+| `update_memory` | Update memory content and/or tags (supports `merge_tags`) |
+| `delete_memory` | Delete a memory by key |
+| `search` | Hybrid semantic + keyword search |
+| `smart_search` | Alias for `search` (kept for back-compat) |
+| `list_memories` | List memories, optionally filtered |
+| `ask` | RAG-style Q&A over your memories |
+| `summarize` | Summarize memories on a topic (or by key list) |
+| `query_graph` | Query the knowledge graph (related concepts / path-finding) |
+| `get_stats` | Engine + provider statistics |
 | `backup` | Create a JSON snapshot |
 | `get_provider_info` | Show current AI provider configuration |
 
 ---
 
-## 🏗️ Architecture
+## 📁 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    MCP Server (stdio/HTTP)                  │
-│                         or                                  │
-│                        CLI Tool                             │
+│              MCP Server (stdio / Streamable HTTP)           │
+│                  FastAPI  +  uvicorn                        │
 ├─────────────────────────────────────────────────────────────┤
 │                      MemoryEngine                           │
 │  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
 │  │  SQLite     │  │  VectorStore │  │  KnowledgeGraph │    │
-│  │  (storage)  │  │  (embeddings)│  │  (concepts)     │    │
+│  │  + FTS5     │  │  (cosine)    │  │  (concepts)     │    │
 │  └─────────────┘  └──────────────┘  └─────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
 │              Pluggable Provider Layer                       │
@@ -358,7 +153,7 @@ When connected via MCP, Claude can use these tools:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Design principle:** Embeddings are **mandatory** (every memory is semantically indexed). Intelligence (AI features like `ask`, `summarize`, auto-tagging) is **optional** — the system degrades gracefully to keyword-based results when no intelligence provider is available.
+Embeddings are **mandatory** (every memory is semantically indexed). Intelligence (AI features like `ask`, `summarize`, auto-tagging) is **optional** — the engine degrades gracefully to keyword results when no intelligence provider is available.
 
 ---
 
@@ -366,40 +161,77 @@ When connected via MCP, Claude can use these tools:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PROVIDER_TYPE` | ✅ | `openai` | Provider: `openai`, `ollama`, `gemini` |
+| `PROVIDER_TYPE` | ✅ | `openai` | `openai`, `ollama`, `gemini`, `anthropic` |
 | `OPENAI_API_KEY` | If OpenAI | — | OpenAI API key |
+| `OPENAI_EMBEDDING_MODEL` | ❌ | `text-embedding-3-small` | |
+| `OPENAI_CHAT_MODEL` | ❌ | `gpt-4o-mini` | |
 | `OLLAMA_HOST` | If Ollama | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_EMBEDDING_MODEL` | If Ollama | `nomic-embed-text` | Ollama embedding model |
-| `OLLAMA_CHAT_MODEL` | If Ollama | `llama3.2` | Ollama chat model |
+| `OLLAMA_EMBEDDING_MODEL` | ❌ | `nomic-embed-text` | |
+| `OLLAMA_CHAT_MODEL` | ❌ | `llama3.2` | |
 | `GEMINI_API_KEY` | If Gemini | — | Google AI API key |
-| `ANTHROPIC_API_KEY` | If Anthropic | — | Anthropic API key |
-| `INTELLIGENCE_PROVIDER` | ❌ | Same as embeddings | Separate provider for AI features |
-| `DATA_DIR` | ❌ | `./data` | Data directory |
-| `TRANSPORT` | ❌ | `stdio` | `stdio` or `http` |
-| `PORT` | ❌ | `3000` | Port for HTTP mode |
+| `ANTHROPIC_API_KEY` | If Anthropic | — | Anthropic API key (chat-only) |
+| `INTELLIGENCE_PROVIDER` | ❌ | same as embeddings | Separate provider for AI features |
+| `DATA_DIR` | ❌ | `./data` (local) / `/data` (PaaS) | Data directory |
+| `TRANSPORT` | ❌ | auto (`http` on PaaS) | `stdio` or `http` |
+| `PORT` | ❌ | `3000` | PaaS injects this |
+
+---
+
+## 📦 CLI Commands
+
+```bash
+python -m adaptive_memory_engine import <path> [-r] [--tag tag1,tag2]
+python -m adaptive_memory_engine list [filter]
+python -m adaptive_memory_engine search <query>
+python -m adaptive_memory_engine get <id>
+python -m adaptive_memory_engine delete <id>
+python -m adaptive_memory_engine stats
+python -m adaptive_memory_engine export [file]
+python -m adaptive_memory_engine snapshot
+python -m adaptive_memory_engine graph <concept>
+python -m adaptive_memory_engine ask <question>
+python -m adaptive_memory_engine provider
+python -m adaptive_memory_engine serve         # start MCP server
+python -m adaptive_memory_engine help
+```
+
+---
+
+## 🔄 Migrating from v1 (Node.js) → v2 (Python)
+
+**Nothing required** — the SQLite schema (`memories`, `embeddings`, `access_log`, FTS5 virtual table) and `knowledge-graph.json` shape are byte-compatible. Existing deployments keep their data.
+
+If you already have a running Node version:
+
+1. Pull the new Python code (Zeabur auto-deploys on push).
+2. Verify with `curl https://<your-app>.zeabur.app/health`.
+3. Reconnect your MCP clients to the same URL.
 
 ---
 
 ## 🧪 Testing
 
-```bash
-# Verify setup
-node cli.js provider
+A minimal smoke test:
 
-# Quick test
-node cli.js import ./README.md --tag test
-node cli.js search "semantic memory"
-node cli.js stats
+```bash
+python -c "from adaptive_memory_engine.engine import MemoryEngine; \
+           from adaptive_memory_engine.providers.factory import ProviderFactory; \
+           from adaptive_memory_engine.config import Config; \
+           cfg = Config.load(); \
+           emb, _ = ProviderFactory.create(cfg); \
+           eng = MemoryEngine(embedding_provider=emb, data_dir=cfg.data_dir); \
+           eng.initialize(); \
+           print('Loaded', len(eng._memories), 'memories')"
 ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! Areas of interest:
+Contributions welcome. Areas of interest:
 - Additional AI providers
-- Additional storage backends
-- Performance optimizations
+- Additional vector stores (FAISS, Qdrant, pgvector)
+- Performance optimizations (HNSW, ANN)
 - Documentation improvements
 
 ---
@@ -413,6 +245,7 @@ MIT © Rakesh Sonawane
 ## 🔗 Links
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [Ollama](https://ollama.com/)
 - [OpenAI](https://platform.openai.com/)
 - [Google AI Studio](https://aistudio.google.com/)
