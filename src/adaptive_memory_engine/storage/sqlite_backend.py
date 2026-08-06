@@ -1,7 +1,9 @@
-"""SQLite backend — byte-compatible schema with the Node version.
+"""SQLite backend — durable storage for memories, embeddings, and access log.
 
-Critical for migration: the existing memories.db on Zeabur MUST keep working.
-Same tables, same columns, same indexes, same FTS5 virtual table, same PRAGMAs.
+Schema: tables `memories`, `embeddings`, `access_log`, virtual table
+`memories_fts` (FTS5, external-content). PRAGMAs are tuned for local-disk
+durability: `journal_mode=DELETE`, `synchronous=NORMAL`, `locking_mode=NORMAL`.
+Embedding BLOBs are little-endian float32.
 """
 from __future__ import annotations
 

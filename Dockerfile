@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# System deps for httpx/uvicorn (sqlite + FTS5 ship with python:3.12-slim)
+# build-essential is needed for any wheel that needs to compile (httpx, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -16,14 +16,11 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --upgrade pip && pip install .
 
-# First-boot entrypoint. If /data/memories.db is missing AND seed-data/ is
-# bundled into the image at build time, copy it in. Existing Zeabur volumes
-# already contain /data/memories.db, so this is a no-op for live deployments.
-# To bundle seed data: commit a non-empty seed-data/ directory.
-RUN mkdir -p /seed-data
-COPY --chmod=755 entrypoint.sh /entrypoint.sh
+# Persistent storage for memories.db + knowledge-graph.json.
+# Mount a volume here in production:  -v $(pwd)/data:/data
+ENV DATA_DIR=/data
 
 EXPOSE 3000
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["adaptive-memory", "serve"]
+# stdio by default. Set TRANSPORT=http PORT=3000 for the HTTP MCP server.
+CMD ["adaptive-memory-server"]

@@ -1,4 +1,4 @@
-"""AdaptiveMemoryEngine — Semantic memory for AI assistants."""
+"""AdaptiveMemoryEngine — A RAG memory layer for AI assistants."""
 
 from .engine import MemoryEngine
 

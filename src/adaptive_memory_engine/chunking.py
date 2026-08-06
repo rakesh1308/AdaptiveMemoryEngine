@@ -1,4 +1,8 @@
-"""Chunking strategies + ChunkStore. Mirrors src/core/ChunkStore.js."""
+"""Chunking strategies + ChunkStore.
+
+Splits long memory content into smaller windows before embedding so that
+similarity search is bounded by chunk size instead of document size.
+"""
 from __future__ import annotations
 
 import hashlib

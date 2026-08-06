@@ -1,4 +1,5 @@
-"""MemoryEngine — top-level orchestrator. Mirrors src/core/MemoryEngine.js."""
+"""MemoryEngine — top-level orchestrator that wires storage, embeddings,
+the knowledge graph, chunking, and the lifecycle layer together."""
 from __future__ import annotations
 
 import json

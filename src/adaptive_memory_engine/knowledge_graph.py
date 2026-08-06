@@ -1,7 +1,8 @@
-"""Knowledge graph. Mirrors src/intelligence/KnowledgeGraph.js — same JSON shape.
+"""Knowledge graph — concept + relationship store.
 
 Concepts: dict of normalized_id -> {id, name, frequency, memoryIds, relatedConcepts, centrality, createdAt}
 Relationships: list of {id, from, to, type, strength, evidence, createdAt}
+Persisted to `data/knowledge-graph.json`.
 """
 from __future__ import annotations
 

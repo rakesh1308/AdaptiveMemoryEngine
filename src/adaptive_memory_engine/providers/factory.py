@@ -1,4 +1,4 @@
-"""Provider factory. Mirrors src/utils/ProviderFactory.js."""
+"""Provider factory — builds embedding + intelligence providers from a Config."""
 from __future__ import annotations
 
 import logging

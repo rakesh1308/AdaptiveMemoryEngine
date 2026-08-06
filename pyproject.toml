@@ -1,11 +1,22 @@
 [project]
 name = "adaptive-memory-engine"
 version = "2.0.0"
-description = "Semantic memory for AI assistants. Pluggable, private, and MCP-native. (Python port)"
+description = "A RAG (Retrieval-Augmented Generation) memory layer for AI assistants, powered by OpenAI embeddings and the Model Context Protocol."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Rakesh Sonawane" }]
+keywords = ["rag", "memory", "mcp", "openai", "embeddings", "knowledge-graph", "semantic-search"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+]
 dependencies = [
     "mcp[cli]>=1.0.0",
     "fastapi>=0.110.0",
@@ -25,8 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-adaptive-memory = "adaptive_memory_engine.cli:main"
-ame = "adaptive_memory_engine.cli:main"
+adaptive-memory-server = "adaptive_memory_engine.server:serve"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

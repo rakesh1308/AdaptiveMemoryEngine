@@ -1,4 +1,4 @@
-"""Lightweight event bus + stable event names matching the Node version."""
+"""Lightweight event bus + stable event names for the lifecycle layer."""
 from __future__ import annotations
 
 import logging

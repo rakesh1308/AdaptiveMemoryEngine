@@ -1,4 +1,9 @@
-"""Provider base classes. Mirrors src/interfaces/EmbeddingProvider.js."""
+"""Provider base classes.
+
+`EmbeddingProvider` is the minimal contract (embed a string into a
+vector + check availability). `IntelligentProvider` adds LLM-backed
+helpers used by the RAG layer (auto-tag, synthesize, expand-query).
+"""
 from __future__ import annotations
 
 import math

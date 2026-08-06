@@ -1,7 +1,8 @@
 """Memory lifecycle: importance scoring, Ebbinghaus decay, Jaccard consolidation.
 
-Simplified: removed ArchiveManager (in-memory only in Node, never persisted) and
-the unused setInterval timers. Behavior of the remaining engines matches Node.
+These run automatically during `MemoryEngine.store_memory` and on a
+background tick. They determine how memory importance and strength evolve
+over time and surface consolidation opportunities.
 """
 from __future__ import annotations
 

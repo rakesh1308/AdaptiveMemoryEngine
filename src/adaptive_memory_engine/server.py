@@ -1,7 +1,7 @@
-"""MCP server: stdio + streamable HTTP. Mirrors server.js 1:1.
+"""MCP server: stdio + streamable HTTP transport.
 
-Uses the official `mcp` Python SDK. FastMCP for HTTP transport (handles
-streamable HTTP + session management internally).
+Built on the official `mcp` Python SDK. Exposes 12 tools that wrap the
+MemoryEngine for any MCP-compatible client (Claude Desktop, Cline, etc.).
 """
 from __future__ import annotations
 
@@ -171,10 +171,9 @@ def build_http_app(engine: MemoryEngine):
     """Return a Starlette app exposing /mcp (streamable HTTP), /health, /."""
     mcp = _build_mcp_server(engine)
     # Disable DNS-rebinding protection by default so the MCP endpoint accepts
-    # requests from arbitrary Host headers (required for PaaS deployments like
-    # Zeabur where the public hostname is not known at build time).
-    # For browser-served MCP you would instead populate
-    # TransportSecuritySettings.allowed_hosts / .allowed_origins.
+    # requests from arbitrary Host headers (e.g. behind a reverse proxy on
+    # any PaaS). For browser-served MCP, populate
+    # TransportSecuritySettings.allowed_hosts / .allowed_origins instead.
     from mcp.server.streamable_http import TransportSecuritySettings
     base_app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(
@@ -223,7 +222,7 @@ def serve_http(engine: MemoryEngine, host: str = "0.0.0.0", port: int = 3000) ->
 
 
 def serve() -> None:
-    """Entrypoint for `adaptive-memory serve` / Procfile."""
+    """Entrypoint for the `adaptive-memory-server` console script and Docker `CMD`."""
     logging.basicConfig(
         level=logging.INFO,
         stream=sys.stderr,

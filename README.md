@@ -1,131 +1,138 @@
 # 🧠 AdaptiveMemoryEngine
 
-**Semantic memory for AI assistants. Pluggable, private, and MCP-native.**
+**A RAG (Retrieval-Augmented Generation) memory layer for AI assistants.**
 
 [![Python](https://img.shields.io/badge/python-≥3.11-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io/)
-[![Deploy on Zeabur](https://img.shields.io/badge/Deploy-Zeabur-7B61FF)](https://zeabur.com)
+[![OpenAI](https://img.shields.io/badge/provider-OpenAI-412991)](https://platform.openai.com/)
 
-AdaptiveMemoryEngine is an intelligent memory system that remembers everything you tell it. Unlike simple note-taking apps, it uses **semantic embeddings** to understand the meaning of your content, enabling intelligent search and AI-powered insights.
+AdaptiveMemoryEngine gives any MCP-compatible AI assistant (Claude Desktop, Cline, etc.) a **persistent, searchable long-term memory** powered by semantic embeddings, hybrid retrieval, and an automatically built knowledge graph.
 
-> **Python port** (v2.0) — same data format, same MCP surface, same Zeabur deployment story as the original Node.js version. Existing `memories.db` and `knowledge-graph.json` keep working without migration.
-
----
-
-## ☁️ Deploy to Zeabur (One-Click)
-
-1. **Push this repo to GitHub** and connect it to Zeabur.
-2. **Set your AI provider key** in Zeabur's Variables tab:
-   - `OPENAI_API_KEY` (recommended) — or `GEMINI_API_KEY`, or set `PROVIDER_TYPE=ollama`
-3. **Wait for the build**. Zeabur auto-detects Python via `pyproject.toml`, builds the image, and starts the server.
-4. **Add a persistent Volume** mounted at `/data` so memories survive restarts.
-5. Connect any MCP client to `https://<your-app>.zeabur.app/mcp`.
-
-`PORT` is auto-injected by Zeabur → transport switches to HTTP automatically.
-
-### Health & info endpoints
-
-- `GET https://<your-app>.zeabur.app/health` — `{status, memories, concepts, embeddings, provider}`
-- `GET https://<your-app>.zeabur.app/` — server info + stats
-- `POST https://<your-app>.zeabur.app/mcp` — MCP JSON-RPC
+Ask your assistant *"what do I know about Python async?"* — and it remembers across sessions.
 
 ---
 
-## ✨ Key Features
+## ✨ What it does
 
-| Feature | Description |
-|---------|-------------|
-| **Semantic Search** | Find memories by meaning, not just keywords. Ask "machine learning" and find "neural networks" content. |
-| **Knowledge Graph** | Automatically builds relationships between concepts in your memories. |
-| **AI-Powered** | Optional AI features for auto-tagging, Q&A, and summarization. |
-| **Privacy-First** | Run completely offline with local AI models (Ollama). |
-| **MCP Native** | Works with Claude Desktop, Cline, and any MCP-compatible tool. |
-| **Multi-Provider** | OpenAI, Google Gemini, Anthropic, or local Ollama. |
+- **Stores** text you save as semantic vectors using OpenAI `text-embedding-3-small`
+- **Retrieves** the most relevant memories for any query using hybrid (semantic + keyword) search
+- **Answers** questions using a RAG pipeline — retrieved context fed to `gpt-4o-mini`
+- **Links** concepts together in a knowledge graph that grows as you save memories
+- **Decays & consolidates** memories over time using an Ebbinghaus-style lifecycle
+- **Speaks MCP** — works with Claude Desktop, Cline, and any MCP-compatible client
+
+---
+
+## 🏗 Architecture
+
+```mermaid
+flowchart TB
+    User[User / AI Client] -->|natural language| MCP[MCP Server\nstdio · Streamable HTTP]
+    MCP --> Engine[MemoryEngine]
+
+    Engine -->|embed / chat| OpenAI[(OpenAI API\nembeddings + chat)]
+    Engine --> SQLite[(SQLite + FTS5\nmemories · embeddings)]
+    Engine --> Vectors[(In-memory\nVector Store)]
+    Engine --> Graph[(Knowledge Graph\nJSON file)]
+    Engine --> Chunks[Chunk Store\nstrategies]
+    Engine --> Lifecycle[Lifecycle\nimportance · decay · consolidation]
+
+    OpenAI -.embeddings.-> Vectors
+    OpenAI -.chat.-> Engine
+```
+
+### Data flow (RAG pipeline)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as MCP Server
+    participant E as MemoryEngine
+    participant O as OpenAI
+    participant DB as SQLite + VectorStore
+
+    U->>M: "what do I know about async?"
+    M->>E: ask(question)
+    E->>O: embed(question)
+    O-->>E: query_vector
+    E->>DB: hybrid_search(query_vector)
+    DB-->>E: top-k memories
+    E->>O: synthesize(context + question)
+    O-->>E: answer
+    E-->>M: answer
+    M-->>U: "You noted that async/await..."
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- **Python ≥ 3.11** (3.12 recommended for Zeabur)
-- An embedding provider — one of:
-  - [OpenAI](https://platform.openai.com/api-keys) (recommended)
-  - [Google AI Studio](https://aistudio.google.com/app/apikey)
-  - [Ollama](https://ollama.com) for 100% local/offline use
-
-### Installation
+### 1. Install
 
 ```bash
 git clone https://github.com/rakesh1308/AdaptiveMemoryEngine.git
 cd AdaptiveMemoryEngine
 pip install -e .
-cp .env.example .env
-# edit .env and add your API key
 ```
 
-### Usage
+### 2. Configure
 
-#### Option 1 — MCP server for Claude Desktop, Cline, etc.
+```bash
+cp .env.example .env
+# edit .env and set OPENAI_API_KEY=sk-...
+```
 
-Add to your MCP settings:
+### 3. Run as an MCP server
+
+```bash
+adaptive-memory-server
+```
+
+Or via the module:
+
+```bash
+python -m adaptive_memory_engine.server
+```
+
+By default it speaks **stdio**. To expose HTTP (for remote clients), set `TRANSPORT=http` and `PORT=3000`.
+
+### 4. Connect from Claude Desktop
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "memory": {
       "command": "python",
-      "args": ["-m", "adaptive_memory_engine", "serve"],
+      "args": ["-m", "adaptive_memory_engine.server"],
       "env": {
-        "OPENAI_API_KEY": "sk-your-key-here",
-        "PROVIDER_TYPE": "openai"
+        "OPENAI_API_KEY": "sk-your-key-here"
       }
     }
   }
 }
 ```
 
-Then ask Claude:
-- "Remember that I prefer TypeScript for new projects"
-- "What do I know about distributed systems?"
-- "Summarize my notes on machine learning"
+Restart Claude Desktop, then ask:
 
-#### Option 2 — CLI
-
-```bash
-# Set your API key
-export OPENAI_API_KEY="sk-your-key-here"
-
-# Import files
-python -m adaptive_memory_engine import ./notes.md --tag work
-python -m adaptive_memory_engine import ./docs -r --tag documentation
-
-# Search
-python -m adaptive_memory_engine search "javascript async patterns"
-
-# Ask AI
-python -m adaptive_memory_engine ask "what projects have I documented?"
-
-# Query knowledge graph
-python -m adaptive_memory_engine graph "machine learning"
-```
+- *"Remember that I prefer TypeScript for new projects"*
+- *"What do I know about distributed systems?"*
+- *"Summarize my notes on machine learning"*
 
 ---
 
-## 🛠 MCP Tools (13 tools, identical to v1)
+## 🛠 MCP Tools
 
-When connected via MCP, clients can use:
-
-| Tool | Description |
-|------|-------------|
+| Tool | Purpose |
+|------|---------|
 | `store_memory` | Save content with automatic embeddings and optional AI auto-tagging |
 | `get_memory` | Retrieve a memory by key |
-| `update_memory` | Update memory content and/or tags (supports `merge_tags`) |
+| `update_memory` | Update memory content and/or tags (`merge_tags=true` to union) |
 | `delete_memory` | Delete a memory by key |
 | `search` | Hybrid semantic + keyword search |
-| `smart_search` | Alias for `search` (kept for back-compat) |
-| `list_memories` | List memories, optionally filtered |
+| `list_memories` | List memories, optionally filtered by text or tag |
 | `ask` | RAG-style Q&A over your memories |
 | `summarize` | Summarize memories on a topic (or by key list) |
 | `query_graph` | Query the knowledge graph (related concepts / path-finding) |
@@ -135,25 +142,71 @@ When connected via MCP, clients can use:
 
 ---
 
-## 📁 Architecture
+## 🧠 How memory works
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              MCP Server (stdio / Streamable HTTP)           │
-│                  FastAPI  +  uvicorn                        │
-├─────────────────────────────────────────────────────────────┤
-│                      MemoryEngine                           │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
-│  │  SQLite     │  │  VectorStore │  │  KnowledgeGraph │    │
-│  │  + FTS5     │  │  (cosine)    │  │  (concepts)     │    │
-│  └─────────────┘  └──────────────┘  └─────────────────┘    │
-├─────────────────────────────────────────────────────────────┤
-│              Pluggable Provider Layer                       │
-│   OpenAI ◄──► Ollama ◄──► Gemini ◄──► Anthropic            │
-└─────────────────────────────────────────────────────────────┘
+### Storage layers
+
+```mermaid
+erDiagram
+    MEMORIES ||--|| EMBEDDINGS : "1:1 (last chunk)"
+    MEMORIES ||--o{ CHUNKS : "1:N"
+    MEMORIES }o--o{ CONCEPTS : "many"
+    CONCEPTS ||--o{ RELATIONSHIPS : "from / to"
+
+    MEMORIES {
+        string id PK
+        string content
+        list tags
+        string createdAt
+        string updatedAt
+        int importance
+        float strength
+        int accessCount
+        string source
+    }
+    EMBEDDINGS {
+        string memoryId FK
+        blob vector "float32 LE"
+    }
+    CHUNKS {
+        string memoryId FK
+        int index
+        string content
+        blob vector
+    }
+    CONCEPTS {
+        string id PK "normalized"
+        string name
+        int frequency
+        list memoryIds
+    }
+    RELATIONSHIPS {
+        string id PK
+        string from FK
+        string to FK
+        string type
+        float strength
+    }
 ```
 
-Embeddings are **mandatory** (every memory is semantically indexed). Intelligence (AI features like `ask`, `summarize`, auto-tagging) is **optional** — the engine degrades gracefully to keyword results when no intelligence provider is available.
+### Lifecycle
+
+Every memory has an `importance` (0–100) and `strength` (0.0–1.0).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Stored: store_memory()
+    Stored --> Accessed: get / search hit
+    Accessed --> Accessed: strength += Δ
+    Stored --> Decayed: time passes
+    Decayed --> Accessed: search hit (recovers)
+    Stored --> Deleted: delete_memory()
+    Deleted --> [*]
+```
+
+- **Importance scoring** — weighted across access frequency, recency, graph centrality, content quality, and reference count.
+- **Decay** — Ebbinghaus-style curve reduces `strength` over time when untouched.
+- **Consolidation** — high-importance memories get merged/deduped to reduce noise.
 
 ---
 
@@ -161,82 +214,95 @@ Embeddings are **mandatory** (every memory is semantically indexed). Intelligenc
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PROVIDER_TYPE` | ✅ | `openai` | `openai`, `ollama`, `gemini`, `anthropic` |
-| `OPENAI_API_KEY` | If OpenAI | — | OpenAI API key |
+| `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
+| `OPENAI_BASE_URL` | ❌ | `https://api.openai.com/v1` | Override for Azure / proxies |
 | `OPENAI_EMBEDDING_MODEL` | ❌ | `text-embedding-3-small` | |
 | `OPENAI_CHAT_MODEL` | ❌ | `gpt-4o-mini` | |
-| `OLLAMA_HOST` | If Ollama | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_EMBEDDING_MODEL` | ❌ | `nomic-embed-text` | |
-| `OLLAMA_CHAT_MODEL` | ❌ | `llama3.2` | |
-| `GEMINI_API_KEY` | If Gemini | — | Google AI API key |
-| `ANTHROPIC_API_KEY` | If Anthropic | — | Anthropic API key (chat-only) |
-| `INTELLIGENCE_PROVIDER` | ❌ | same as embeddings | Separate provider for AI features |
-| `DATA_DIR` | ❌ | `./data` (local) / `/data` (PaaS) | Data directory |
-| `TRANSPORT` | ❌ | auto (`http` on PaaS) | `stdio` or `http` |
-| `PORT` | ❌ | `3000` | PaaS injects this |
+| `DATA_DIR` | ❌ | `./data` (local) / `/data` (container) | Where SQLite + graph JSON live |
+| `TRANSPORT` | ❌ | auto (`http` when `PORT` set) | `stdio` or `http` |
+| `PORT` | ❌ | `3000` | Set to enable HTTP transport |
 
 ---
 
-## 📦 CLI Commands
+## 📁 Project structure
 
-```bash
-python -m adaptive_memory_engine import <path> [-r] [--tag tag1,tag2]
-python -m adaptive_memory_engine list [filter]
-python -m adaptive_memory_engine search <query>
-python -m adaptive_memory_engine get <id>
-python -m adaptive_memory_engine delete <id>
-python -m adaptive_memory_engine stats
-python -m adaptive_memory_engine export [file]
-python -m adaptive_memory_engine snapshot
-python -m adaptive_memory_engine graph <concept>
-python -m adaptive_memory_engine ask <question>
-python -m adaptive_memory_engine provider
-python -m adaptive_memory_engine serve         # start MCP server
-python -m adaptive_memory_engine help
+```
+AdaptiveMemoryEngine/
+├── src/adaptive_memory_engine/
+│   ├── server.py                # MCP server (stdio + HTTP)
+│   ├── engine.py                # MemoryEngine orchestrator
+│   ├── config.py                # env / .env loader
+│   ├── events.py                # EventBus
+│   ├── chunking.py              # Chunk strategies + store
+│   ├── knowledge_graph.py       # Concept + relationship graph
+│   ├── lifecycle.py             # Importance · decay · consolidation
+│   └── providers/               # OpenAI provider
+├── data/                        # SQLite + graph (gitignored)
+├── tests/pre_deploy.py          # End-to-end regression test
+├── pyproject.toml
+└── README.md
 ```
 
 ---
 
-## 🔄 Migrating from v1 (Node.js) → v2 (Python)
+## 🐳 Docker
 
-**Nothing required** — the SQLite schema (`memories`, `embeddings`, `access_log`, FTS5 virtual table) and `knowledge-graph.json` shape are byte-compatible. Existing deployments keep their data.
+```bash
+docker build -t ame .
+docker run -p 3000:3000 \
+  -e OPENAI_API_KEY=sk-... \
+  -v $(pwd)/data:/data \
+  ame
+```
 
-If you already have a running Node version:
+Endpoints:
 
-1. Pull the new Python code (Zeabur auto-deploys on push).
-2. Verify with `curl https://<your-app>.zeabur.app/health`.
-3. Reconnect your MCP clients to the same URL.
+- `POST /mcp` — MCP JSON-RPC
+- `GET /health` — `{status, memories, concepts, embeddings, provider}`
+- `GET /` — server info + stats
+
+The image is platform-agnostic — runs the same on any Docker host (local, AWS, GCP, Fly.io, Render, Railway, etc.) as long as you mount a volume at `/data` for persistence.
 
 ---
 
 ## 🧪 Testing
 
-A minimal smoke test:
-
 ```bash
-python -c "from adaptive_memory_engine.engine import MemoryEngine; \
-           from adaptive_memory_engine.providers.factory import ProviderFactory; \
-           from adaptive_memory_engine.config import Config; \
-           cfg = Config.load(); \
-           emb, _ = ProviderFactory.create(cfg); \
-           eng = MemoryEngine(embedding_provider=emb, data_dir=cfg.data_dir); \
-           eng.initialize(); \
-           print('Loaded', len(eng._memories), 'memories')"
+python tests/pre_deploy.py
 ```
 
----
-
-## 🤝 Contributing
-
-Contributions welcome. Areas of interest:
-- Additional AI providers
-- Additional vector stores (FAISS, Qdrant, pgvector)
-- Performance optimizations (HNSW, ANN)
-- Documentation improvements
+Runs the full end-to-end suite: schema, FTS5, embedding load, knowledge graph, engine CRUD, hybrid search, MCP HTTP round-trip, stdio MCP, and chunking strategies.
 
 ---
 
-## 📄 License
+## � For developers
+
+### Data contracts
+
+- **`data/memories.db`** — SQLite schema: tables `memories`, `embeddings`, `access_log`, virtual table `memories_fts` (FTS5, external-content).
+  PRAGMAs: `journal_mode=DELETE`, `synchronous=NORMAL`, `locking_mode=NORMAL`.
+  Embedding BLOBs are little-endian float32.
+- **`data/knowledge-graph.json`** — `{concepts: [[id, node], ...], relationships: [...], conceptIndex: [[id, [memoryId, ...]], ...], savedAt}`.
+  Concept ids are normalised: `lowercase → non-alphanum → '_' → trim '_'`.
+
+### Conventions
+
+- Logging goes to **stderr** (stdio MCP keeps stdout clean).
+- All datetimes use `now_iso()` from `events.py`.
+- Embedding vectors are persisted as little-endian float32 (`struct.pack(f"<{n}f", ...)`).
+- New MCP tools go in `server.py:_register_tools`.
+- The single shipped provider is OpenAI (`src/adaptive_memory_engine/providers/openai_provider.py`).
+
+### Adding a new provider
+
+1. Subclass `EmbeddingProvider` (for embeddings) or `IntelligentProvider` (for chat + helpers) in `src/adaptive_memory_engine/providers/`.
+2. Wire it into `providers/factory.py`.
+3. Add credentials / config fields to `config.py`.
+4. Document the new env vars in the table above.
+
+---
+
+## �📄 License
 
 MIT © Rakesh Sonawane
 
@@ -246,6 +312,4 @@ MIT © Rakesh Sonawane
 
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-- [Ollama](https://ollama.com/)
-- [OpenAI](https://platform.openai.com/)
-- [Google AI Studio](https://aistudio.google.com/)
+- [OpenAI Embeddings](https://platform.openai.com/docs/guides/embeddings)
