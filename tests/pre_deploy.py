@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -43,11 +42,9 @@ try:
     from adaptive_memory_engine.config import Config
     from adaptive_memory_engine.engine import MemoryEngine
     from adaptive_memory_engine.providers.factory import ProviderFactory
-    from adaptive_memory_engine.storage import SQLiteBackend, VectorStore
+    from adaptive_memory_engine.storage import SQLiteBackend
     from adaptive_memory_engine.knowledge_graph import KnowledgeGraph
-    from adaptive_memory_engine.chunking import ChunkStore, ChunkingStrategies
-    from adaptive_memory_engine.events import EventBus, MemoryEvents, now_iso
-    from adaptive_memory_engine.providers import OpenAIProvider
+    from adaptive_memory_engine.chunking import ChunkingStrategies
     ok("all modules import cleanly")
 except Exception as e:
     fail("module import", e)

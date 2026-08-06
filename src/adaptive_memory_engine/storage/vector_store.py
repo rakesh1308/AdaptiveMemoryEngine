@@ -5,11 +5,9 @@ Holds both whole-memory vectors and per-chunk vectors during a session.
 """
 from __future__ import annotations
 
-import hashlib
 import math
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from ..events import now_iso
 

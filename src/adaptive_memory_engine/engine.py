@@ -4,19 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from .chunking import ChunkStore
-from .config import Config
 from .events import EventBus, MemoryEvents, now_iso
 from .knowledge_graph import KnowledgeGraph
 from .lifecycle import MemoryLifecycle
 from .providers.base import IntelligentProvider
-from .providers.factory import ProviderFactory
 from .storage import SQLiteBackend, VectorStore
 
 log = logging.getLogger(__name__)
@@ -70,7 +66,6 @@ class MemoryEngine:
         log.info("Loaded %d memories", len(self._memories))
 
     def _start_graph_autosave(self) -> None:
-        import time
         stop = threading.Event()
 
         def _loop() -> None:

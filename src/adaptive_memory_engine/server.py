@@ -8,10 +8,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any
 
 import uvicorn
-from fastapi import FastAPI
 
 from .config import Config
 from .engine import MemoryEngine
@@ -24,10 +22,6 @@ SERVER_VERSION = "2.0.0"
 
 
 # ---- result helpers ----
-
-def _text(s: str) -> dict:
-    return {"type": "text", "text": s}
-
 
 def _format_search(results: list[dict]) -> str:
     if not results:
@@ -184,7 +178,7 @@ def build_http_app(engine: MemoryEngine):
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
-    async def root(request):
+    async def root(_request):
         cfg = Config.load()
         s = engine.get_stats()
         return JSONResponse({
@@ -199,7 +193,7 @@ def build_http_app(engine: MemoryEngine):
             "stats": {"memories": s.get("total", 0), "concepts": s.get("concepts", 0)},
         })
 
-    async def health(request):
+    async def health(_request):
         s = engine.get_stats()
         return JSONResponse({
             "status": "ok",

@@ -12,7 +12,7 @@ import sqlite3
 import struct
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from ..events import now_iso
 
