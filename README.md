@@ -19,7 +19,6 @@ Ask your assistant *"what do I know about Python async?"* — and it remembers a
 - **Retrieves** the most relevant memories for any query using hybrid (semantic + keyword) search
 - **Answers** questions using a RAG pipeline — retrieved context fed to `gpt-4o-mini`
 - **Links** concepts together in a knowledge graph that grows as you save memories
-- **Decays & consolidates** memories over time using an Ebbinghaus-style lifecycle
 - **Speaks MCP** — works with Claude Desktop, Cline, and any MCP-compatible client
 
 ---
@@ -36,7 +35,7 @@ flowchart TB
     Engine --> Vectors[(In-memory\nVector Store)]
     Engine --> Graph[(Knowledge Graph\nJSON file)]
     Engine --> Chunks[Chunk Store\nstrategies]
-    Engine --> Lifecycle[Lifecycle\nimportance · decay · consolidation]
+    Engine --> Lifecycle[Lifecycle\nimportance scoring]
 
     OpenAI -.embeddings.-> Vectors
     OpenAI -.chat.-> Engine
@@ -189,24 +188,7 @@ erDiagram
     }
 ```
 
-### Lifecycle
-
-Every memory has an `importance` (0–100) and `strength` (0.0–1.0).
-
-```mermaid
-stateDiagram-v2
-    [*] --> Stored: store_memory()
-    Stored --> Accessed: get / search hit
-    Accessed --> Accessed: strength += Δ
-    Stored --> Decayed: time passes
-    Decayed --> Accessed: search hit (recovers)
-    Stored --> Deleted: delete_memory()
-    Deleted --> [*]
-```
-
-- **Importance scoring** — weighted across access frequency, recency, graph centrality, content quality, and reference count.
-- **Decay** — Ebbinghaus-style curve reduces `strength` over time when untouched.
-- **Consolidation** — high-importance memories get merged/deduped to reduce noise.
+Every memory also gets an `importance` score (0–100) on creation, weighted across access frequency, recency, graph centrality, content quality, and reference count.
 
 ---
 
@@ -235,7 +217,7 @@ AdaptiveMemoryEngine/
 │   ├── events.py                # EventBus
 │   ├── chunking.py              # Chunk strategies + store
 │   ├── knowledge_graph.py       # Concept + relationship graph
-│   ├── lifecycle.py             # Importance · decay · consolidation
+│   ├── lifecycle.py             # Importance scoring + access tracking
 │   └── providers/               # OpenAI provider
 ├── data/                        # SQLite + graph (gitignored)
 ├── tests/pre_deploy.py          # End-to-end regression test
