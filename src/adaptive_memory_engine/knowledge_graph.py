@@ -60,6 +60,33 @@ class KnowledgeGraph:
         # concepts is stored as array of [id, node] to preserve Maps
         for pair in data.get("concepts", []):
             cid, node = pair[0], pair[1]
+            # relatedConcepts may be stored either as a dict (Python side)
+            # or as a list of [other, strength] pairs (Node JSON). Normalize
+            # to a dict here so add_relationship() never crashes calling
+            # .get() on a list. Save() will re-emit the list-of-pairs shape
+            # for Node compatibility.
+            rc = node.get("relatedConcepts") if isinstance(node, dict) else None
+            if isinstance(rc, list):
+                normalized: dict[str, float] = {}
+                for entry in rc:
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        other, weight = entry[0], entry[1]
+                        if isinstance(other, str) and other:
+                            try:
+                                normalized[other] = float(weight)
+                            except (TypeError, ValueError):
+                                normalized[other] = 0.0
+                    elif isinstance(entry, dict):
+                        other = entry.get("concept") or entry.get("id")
+                        weight = entry.get("strength", 0)
+                        if isinstance(other, str) and other:
+                            try:
+                                normalized[other] = float(weight)
+                            except (TypeError, ValueError):
+                                normalized[other] = 0.0
+                node["relatedConcepts"] = normalized
+            elif not isinstance(rc, dict):
+                node["relatedConcepts"] = {}
             self.concepts[cid] = node
         # relationships may be stored either as direct objects or as [id, node] pairs
         # (legacy Node versions wrote them as direct objects, but newer versions use Map
@@ -89,8 +116,26 @@ class KnowledgeGraph:
                 valid = [i for i in ids if isinstance(i, str) and i]
                 if valid:
                     cleaned.append([cid, sorted(valid)])
+            # Serialise relatedConcepts as a list of [other, strength] pairs to
+            # match the Node on-disk shape and keep _load() idempotent. Defensive
+            # against non-dict values (corrupt file, older Python build).
+            concepts_payload: list[list] = []
+            for cid, node in self.concepts.items():
+                if not isinstance(node, dict):
+                    concepts_payload.append([cid, node])
+                    continue
+                rc = node.get("relatedConcepts")
+                if isinstance(rc, dict):
+                    serialised_rc = [[k, float(v)] for k, v in rc.items() if isinstance(k, str)]
+                elif isinstance(rc, list):
+                    serialised_rc = rc  # already in Node shape, pass through
+                else:
+                    serialised_rc = []
+                node_copy = dict(node)
+                node_copy["relatedConcepts"] = serialised_rc
+                concepts_payload.append([cid, node_copy])
             payload = {
-                "concepts": [[cid, node] for cid, node in self.concepts.items()],
+                "concepts": concepts_payload,
                 "relationships": self.relationships,
                 "conceptIndex": cleaned,
                 "savedAt": now_iso(),
