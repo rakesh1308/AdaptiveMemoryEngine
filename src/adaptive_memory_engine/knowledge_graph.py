@@ -74,14 +74,25 @@ class KnowledgeGraph:
                 rels.append(r)
         self.relationships = rels
         for cid, mem_ids in data.get("conceptIndex", []):
-            self.concept_index[cid] = set(mem_ids)
+            # Defensive: drop anything that isn't a string. Older builds (or a
+            # corrupted file) could have written `null` here, which then makes
+            # sorted() crash with `'<' not supported between 'NoneType' and 'str'`.
+            self.concept_index[cid] = {m for m in mem_ids if isinstance(m, str)}
 
     def save(self) -> None:
         with self._lock:
+            # Defensive: coerce every memory id to str before sorting, and
+            # silently drop None/empty entries. This both fixes autosave
+            # crashes from older builds and self-heals the on-disk file.
+            cleaned: list[list] = []
+            for cid, ids in self.concept_index.items():
+                valid = [i for i in ids if isinstance(i, str) and i]
+                if valid:
+                    cleaned.append([cid, sorted(valid)])
             payload = {
                 "concepts": [[cid, node] for cid, node in self.concepts.items()],
                 "relationships": self.relationships,
-                "conceptIndex": [[cid, sorted(ids)] for cid, ids in self.concept_index.items()],
+                "conceptIndex": cleaned,
                 "savedAt": now_iso(),
             }
             tmp = self.graph_file.with_suffix(".json.tmp")

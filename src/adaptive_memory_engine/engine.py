@@ -400,6 +400,77 @@ class MemoryEngine:
         self.event_bus.publish(MemoryEvents.BACKUP_CREATED, {"path": str(path)})
         return {"path": str(path), "size": path.stat().st_size}
 
+    # ---- graph maintenance ----
+
+    def backfill_graph(
+        self,
+        memory_ids: list[str] | None = None,
+        dry_run: bool = False,
+        rebuild_all: bool = False,
+    ) -> dict:
+        """Ensure every memory is represented in the knowledge graph.
+
+        By default, only memories that are missing from `concept_index` are
+        re-run through `build_from_memory`. With `rebuild_all=True`, every
+        supplied memory is re-extracted (useful when changing extractors).
+
+        Args:
+            memory_ids: restrict to these keys. If None, scans all memories.
+            dry_run: report what would change without mutating the graph.
+            rebuild_all: re-run extraction even for already-indexed memories.
+        """
+        all_memories = self.sqlite.get_all()
+        if memory_ids is not None:
+            wanted = set(memory_ids)
+            all_memories = [m for m in all_memories if m["id"] in wanted]
+
+        # Memories that have at least one concept linked are "indexed".
+        already_indexed: set[str] = set()
+        for ids in self.knowledge_graph.concept_index.values():
+            for mid in ids:
+                if isinstance(mid, str) and mid:
+                    already_indexed.add(mid)
+
+        scanned = len(all_memories)
+        skipped_already_indexed = 0
+        processed: list[str] = []
+        errors: list[dict[str, str]] = []
+
+        for mem in all_memories:
+            mid = mem["id"]
+            if not rebuild_all and mid in already_indexed:
+                skipped_already_indexed += 1
+                continue
+            if dry_run:
+                processed.append(mid)
+                continue
+            try:
+                self.knowledge_graph.build_from_memory(
+                    mid,
+                    mem.get("content", ""),
+                    mem.get("tags", []) or [],
+                    intelligence=self.intelligence_provider,
+                )
+                processed.append(mid)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("backfill_graph failed for %s", mid)
+                errors.append({"id": mid, "error": str(exc)})
+
+        if not dry_run:
+            self.knowledge_graph.mark_dirty()
+            # Save eagerly so the next autosave tick sees a clean file even
+            # if the autosave thread happens to be inside _load() at the time.
+            self.knowledge_graph.save()
+
+        return {
+            "scanned": scanned,
+            "skippedAlreadyIndexed": skipped_already_indexed,
+            "processed": len(processed),
+            "errors": errors,
+            "dryRun": dry_run,
+            "rebuildAll": rebuild_all,
+        }
+
     # ---- shutdown helper for graceful HTTP termination ----
 
     def shutdown(self) -> None:

@@ -111,6 +111,25 @@ def _register_tools(mcp, engine: MemoryEngine) -> None:
             ensure_ascii=False,
         )
 
+    @mcp.tool(
+        name="backfill_graph",
+        description=(
+            "Re-extract concepts/relationships for memories missing from the "
+            "knowledge graph. Use dry_run=true first to preview. "
+            "Pass memory_ids to target specific keys; pass rebuild_all=true "
+            "to re-extract every memory."
+        ),
+    )
+    def backfill_graph(
+        memory_ids: list[str] | None = None,
+        dry_run: bool = False,
+        rebuild_all: bool = False,
+    ) -> str:
+        result = engine.backfill_graph(
+            memory_ids=memory_ids, dry_run=bool(dry_run), rebuild_all=bool(rebuild_all)
+        )
+        return json.dumps(result, indent=2, ensure_ascii=False)
+
     @mcp.tool(name="get_stats", description="Show system statistics.")
     def get_stats() -> str:
         return json.dumps(engine.get_stats(), indent=2)
