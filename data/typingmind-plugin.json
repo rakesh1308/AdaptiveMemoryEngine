@@ -1,0 +1,458 @@
+{
+  "id": "8c1f7a3d-2b4e-4a5a-9d11-7e2c9f3b6a01",
+  "uuid": "8c1f7a3d-2b4e-4a5a-9d11-7e2c9f3b6a01",
+  "title": "Adaptive Memory Engine",
+  "iconURL": "https://raw.githubusercontent.com/rakesh1308/AdaptiveMemoryEngine/main/icon.png",
+  "githubURL": "https://github.com/rakesh1308/AdaptiveMemoryEngine",
+  "sourceUUID": null,
+  "oauthConfig": null,
+  "userSettings": [
+    {
+      "name": "mcpServerUrl",
+      "label": "MCP Server URL",
+      "description": "HTTP endpoint of your Adaptive Memory Engine. Local: http://localhost:3000. Hosted (Zeabur): https://<your-app>.zeabur.app",
+      "required": true,
+      "defaultValue": "http://localhost:3000"
+    },
+    {
+      "name": "authToken",
+      "label": "Auth Token (optional)",
+      "type": "password",
+      "description": "If your server enforces AUTH_TOKEN, paste it here. Leave blank for local dev.",
+      "required": false
+    }
+  ],
+  "overviewMarkdown": "## Adaptive Memory Engine\n\nPersistent, searchable long-term memory for every AI in TypingMind.\n\n- **22 tools** — store, search, recall, ask, version history, suggestions, dedup, export\n- **Knowledge graph** — built-in, automatic\n- **Multi-model memory** — works across GPT, Claude, Gemini, DeepSeek, Grok, Mistral\n- **Self-hosted** — your data, your server, your OpenAI key\n- **Free** — no subscription\n\n**How to use**\n\n- *\"Remember I prefer dark roast coffee\"* → saves automatically\n- *\"What do you remember about my project?\"* → recalls\n- *\"Show my memory version history\"* → restores prior versions\n- *\"Import my ChatGPT history from ~/Downloads/conversations.json\"* → bulk import\n\nMemory lives in your MCP server (local or hosted), shared across every model in TypingMind. Open the dashboard at `{mcpServerUrl}/` for stats.",
+  "authenticationType": "AUTH_TYPE_NONE",
+  "dynamicContextEndpoints": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "How to use this plugin",
+      "url": "",
+      "method": "GET",
+      "source": "static",
+      "staticContent": "You have access to the Adaptive Memory Engine via MCP. Use store_memory proactively when the user mentions a preference, decision, or fact worth remembering. Use search_memories / ask_memory BEFORE answering questions that may relate to past context. Use list_suggestions weekly to review duplicates. Use export_memories with format='csv' for portability.",
+      "cacheDurationHours": 24,
+      "cacheRefreshPolicy": "REFRESH_NEVER"
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "Live stats",
+      "url": "{mcpServerUrl}/health",
+      "method": "GET",
+      "source": "http",
+      "cacheDurationHours": 1,
+      "cacheRefreshPolicy": "REFRESH_NEVER",
+      "hasBody": false,
+      "hasHeaders": false,
+      "requestHeaders": "{\"Authorization\": \"Bearer {authToken}\"}"
+    }
+  ],
+  "pluginFunctions": [
+    {
+      "id": "aaaa1111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "store_memory",
+      "implementationType": "mcp",
+      "serverConfig": {
+        "mcpServers": {
+          "adaptive_memory_engine": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "{mcpServerUrl}",
+              "--header",
+              "Authorization: Bearer {authToken}"
+            ]
+          }
+        }
+      },
+      "openaiSpec": {
+        "name": "store_memory",
+        "description": "Save content to long-term memory with automatic embeddings and optional AI auto-tagging. Use this whenever the user expresses a preference, decision, project fact, or any detail worth remembering across sessions.",
+        "parameters": {
+          "type": "object",
+          "required": ["key", "content"],
+          "properties": {
+            "key": {"type": "string", "description": "Short stable identifier for the memory (e.g. 'user-coffee-preference')"},
+            "content": {"type": "string", "description": "The fact to remember in plain English"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags to organize the memory (e.g. ['work','client-x'])"},
+            "auto_tag": {"type": "boolean", "description": "If true, ask the AI to suggest relevant tags automatically"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1112-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "search_memories",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "search_memories",
+        "description": "Hybrid (semantic + keyword) search across all stored memories. Returns ranked results with scores. Use BEFORE answering questions that may relate to past conversations.",
+        "parameters": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "query": {"type": "string", "description": "Natural-language search query"},
+            "limit": {"type": "number", "description": "Max results (default 10)"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1113-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "ask_memory",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "ask_memory",
+        "description": "Ask a question and get a RAG-style answer grounded in your stored memories. Combines search + AI synthesis.",
+        "parameters": {
+          "type": "object",
+          "required": ["question"],
+          "properties": {
+            "question": {"type": "string", "description": "Plain-language question"},
+            "context_limit": {"type": "number", "description": "How many memories to use as context (default 3)"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1114-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "get_memory",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "get_memory",
+        "description": "Retrieve one memory by its key. Returns the full content, tags, and metadata.",
+        "parameters": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {"key": {"type": "string", "description": "Memory id"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1115-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "list_memories",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "list_memories",
+        "description": "List all memories, optionally filtered by text or tag. Use to discover what is stored.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filter": {"type": "string", "description": "Substring filter on content/id"},
+            "tag": {"type": "string", "description": "Filter by exact tag"},
+            "limit": {"type": "number", "description": "Max results (default 50)"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1116-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "delete_memory",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "delete_memory",
+        "description": "Delete one memory by key. Use only when explicitly asked.",
+        "parameters": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {"key": {"type": "string", "description": "Memory id to delete"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1117-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "set_active_tags",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "set_active_tags",
+        "description": "Scope this chat to one or more tags (the 'buckets' feature). Subsequent memory operations in this chat will only see memories that share at least one of these tags.",
+        "parameters": {
+          "type": "object",
+          "required": ["tags"],
+          "properties": {
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Tag names to scope to"},
+            "chat_id": {"type": "string", "description": "Chat identifier (TypingMind provides this automatically)"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1118-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "clear_active_tags",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "clear_active_tags",
+        "description": "Reset this chat's tag scope back to global (all memories visible).",
+        "parameters": {
+          "type": "object",
+          "properties": {"chat_id": {"type": "string", "description": "Chat identifier"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1119-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "get_memory_history",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "get_memory_history",
+        "description": "Get all prior versions of a memory (most recent first). Use to see what changed or to restore a previous state.",
+        "parameters": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {
+            "key": {"type": "string", "description": "Memory id"},
+            "limit": {"type": "number", "description": "Max versions to return (default 50)"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111a-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "restore_memory_version",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "restore_memory_version",
+        "description": "Restore a memory to a prior state. The current state is snapshotted first so this is reversible.",
+        "parameters": {
+          "type": "object",
+          "required": ["key", "version_id"],
+          "properties": {
+            "key": {"type": "string", "description": "Memory id"},
+            "version_id": {"type": "string", "description": "Version id from get_memory_history"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111b-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "list_suggestions",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "list_suggestions",
+        "description": "List memory suggestions — duplicates, tag-cluster overlaps, or stale entries. Status defaults to 'open'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "status": {"type": "string", "enum": ["open", "applied", "dismissed"], "description": "Filter by status"},
+            "limit": {"type": "number", "description": "Max suggestions to return"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111c-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "apply_suggestion",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "apply_suggestion",
+        "description": "Apply a suggestion (merge duplicates, etc). The merge preserves the first target and removes the rest.",
+        "parameters": {
+          "type": "object",
+          "required": ["suggestion_id"],
+          "properties": {"suggestion_id": {"type": "string", "description": "Suggestion id from list_suggestions"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111d-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "dismiss_suggestion",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "dismiss_suggestion",
+        "description": "Dismiss a suggestion without applying it.",
+        "parameters": {
+          "type": "object",
+          "required": ["suggestion_id"],
+          "properties": {"suggestion_id": {"type": "string", "description": "Suggestion id"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111e-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "run_suggestion_scan",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "run_suggestion_scan",
+        "description": "Scan all memories for duplicates, tag-cluster overlaps, and stale entries. Creates new open suggestions for review.",
+        "parameters": {
+          "type": "object",
+          "properties": {"max_new": {"type": "number", "description": "Cap on new suggestions to create (default 20)"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa111f-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "export_memories",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "export_memories",
+        "description": "Export all memories. Format: json (default), csv, or text (with AI-ready instructions prepended).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "format": {"type": "string", "enum": ["json", "csv", "text"], "description": "Output format"},
+            "include_versions": {"type": "boolean", "description": "Include version history in JSON output"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1120-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "import_memories",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "import_memories",
+        "description": "Bulk-import a JSON list of memories. Each item: {id, content, tags?}. Dedups by id and exact content match.",
+        "parameters": {
+          "type": "object",
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {"type": "string"},
+                  "content": {"type": "string"},
+                  "tags": {"type": "array", "items": {"type": "string"}}
+                }
+              },
+              "description": "List of memories to import"
+            }
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1121-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "import_chat_export",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "import_chat_export",
+        "description": "Import an entire AI chat history export file. Supports ChatGPT (conversations.json) and Claude (conversations.json) formats. Platform auto-detected. Optional tag_prefix applied to every imported memory (default 'imported').",
+        "parameters": {
+          "type": "object",
+          "required": ["file_path"],
+          "properties": {
+            "file_path": {"type": "string", "description": "Absolute path to the export file"},
+            "platform": {"type": "string", "enum": ["auto", "chatgpt", "claude"], "description": "Source platform (default: auto-detect)"},
+            "tag_prefix": {"type": "string", "description": "Tag prefix applied to every imported memory (default 'imported')"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1122-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "summarize_memory",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "summarize_memory",
+        "description": "Get a 1-2 sentence summary of a single memory. Cheaper than recalling the full content when you only need the gist.",
+        "parameters": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {"key": {"type": "string", "description": "Memory id"}}
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1123-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "summarize",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "summarize",
+        "description": "Summarize memories matching a query, or specific keys by id.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {"type": "string", "description": "Query to match memories"},
+            "keys": {"type": "array", "items": {"type": "string"}, "description": "Specific memory ids"},
+            "style": {"type": "string", "enum": ["concise", "detailed"], "description": "Output style"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1124-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "query_graph",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "query_graph",
+        "description": "Query the knowledge graph: get related concepts for a concept, or find the path between two concepts.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "concept": {"type": "string", "description": "Concept to start from"},
+            "depth": {"type": "number", "description": "Hop depth (default 1)"},
+            "find_path_to": {"type": "string", "description": "Find path to this concept"}
+          }
+        }
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1125-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "get_stats",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "get_stats",
+        "description": "Show engine stats: total memories, embeddings, concepts, relationships, providers.",
+        "parameters": {"type": "object", "properties": {}}
+      },
+      "outputType": "respond_to_ai"
+    },
+    {
+      "id": "aaaa1126-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "backup",
+      "implementationType": "mcp",
+      "serverConfig": {"mcpServers": {"adaptive_memory_engine": {"command": "npx", "args": ["-y", "mcp-remote", "{mcpServerUrl}"]}}},
+      "openaiSpec": {
+        "name": "backup",
+        "description": "Create a JSON snapshot of the entire memory store + knowledge graph.",
+        "parameters": {"type": "object", "properties": {}}
+      },
+      "outputType": "respond_to_ai"
+    }
+  ]
+}

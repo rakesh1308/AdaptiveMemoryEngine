@@ -55,6 +55,41 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
 );
 """
 
+# v2.1.0: version history (every edit snapshots prior state)
+# NOTE: no ON DELETE CASCADE — versions outlive the memory row so that
+# restoring after a delete still works. Orphan versions are pruned
+# explicitly by delete_with_history().
+_SCHEMA_V2 = """
+CREATE TABLE IF NOT EXISTS memory_versions (
+  version_id  TEXT PRIMARY KEY,
+  memory_id   TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  tags        TEXT DEFAULT '[]',
+  importance  INTEGER DEFAULT 50,
+  version_num INTEGER DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  source      TEXT DEFAULT 'mcp'
+);
+CREATE INDEX IF NOT EXISTS idx_versions_memory ON memory_versions(memory_id, created_at DESC);
+"""
+
+# v2.2.0: memory suggestions (dedup / contradiction / stale proposals)
+# Suggestions are independent of their target memories — they survive
+# even if a target is deleted, so we don't FK-cascade.
+_SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS memory_suggestions (
+  suggestion_id TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL,        -- 'merge' | 'contradiction' | 'stale' | 'duplicate'
+  status        TEXT NOT NULL,        -- 'open' | 'applied' | 'dismissed'
+  target_ids    TEXT NOT NULL,        -- JSON array of memory ids involved
+  summary       TEXT NOT NULL,        -- human-readable description
+  payload       TEXT DEFAULT '{}',    -- JSON, kind-specific data (e.g. merged_content)
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  resolved_at   DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_suggestions_status ON memory_suggestions(status, created_at DESC);
+"""
+
 
 class SQLiteBackend:
     def __init__(self, data_dir: str | Path) -> None:
@@ -74,6 +109,9 @@ class SQLiteBackend:
         self._conn.execute("PRAGMA locking_mode = NORMAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.executescript(_SCHEMA)
+        # Idempotent additive migrations
+        self._conn.executescript(_SCHEMA_V2)
+        self._conn.executescript(_SCHEMA_V3)
 
     def close(self) -> None:
         if self._conn is not None:
@@ -91,26 +129,54 @@ class SQLiteBackend:
     def insert(self, memory: dict[str, Any]) -> None:
         tags_json = json.dumps(memory.get("tags", []), ensure_ascii=False)
         now = now_iso()
-        self.conn.execute(
-            """
-            INSERT OR REPLACE INTO memories
-              (id, content, tags, created_at, updated_at, importance, strength,
-               access_count, source, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                memory["id"],
-                memory["content"],
-                tags_json,
-                memory.get("createdAt") or now,
-                memory.get("updatedAt") or now,
-                int(memory.get("importance", 50)),
-                float(memory.get("strength", 1.0)),
-                int(memory.get("accessCount", 0)),
-                memory.get("source", "user"),
-                int(memory.get("version", 1)),
-            ),
-        )
+        # Use UPDATE-then-INSERT instead of INSERT OR REPLACE so that we
+        # don't fire ON DELETE CASCADE on dependent tables (memory_versions,
+        # memory_suggestions, embeddings, access_log).
+        existing = self.conn.execute(
+            "SELECT 1 FROM memories WHERE id = ?", (memory["id"],)
+        ).fetchone()
+        if existing:
+            self.conn.execute(
+                """
+                UPDATE memories SET
+                  content = ?, tags = ?, updated_at = ?,
+                  importance = ?, strength = ?, access_count = ?,
+                  source = ?, version = ?
+                WHERE id = ?
+                """,
+                (
+                    memory["content"],
+                    tags_json,
+                    memory.get("updatedAt") or now,
+                    int(memory.get("importance", 50)),
+                    float(memory.get("strength", 1.0)),
+                    int(memory.get("accessCount", 0)),
+                    memory.get("source", "user"),
+                    int(memory.get("version", 1)),
+                    memory["id"],
+                ),
+            )
+        else:
+            self.conn.execute(
+                """
+                INSERT INTO memories
+                  (id, content, tags, created_at, updated_at, importance, strength,
+                   access_count, source, version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    memory["id"],
+                    memory["content"],
+                    tags_json,
+                    memory.get("createdAt") or now,
+                    memory.get("updatedAt") or now,
+                    int(memory.get("importance", 50)),
+                    float(memory.get("strength", 1.0)),
+                    int(memory.get("accessCount", 0)),
+                    memory.get("source", "user"),
+                    int(memory.get("version", 1)),
+                ),
+            )
         # FTS upsert — match Node's `(memory.tags || []).join(' ')` shape
         tags_space = " ".join(memory.get("tags") or [])
         self.conn.execute(
@@ -141,6 +207,11 @@ class SQLiteBackend:
         self.conn.execute(
             "INSERT INTO memories_fts(memories_fts, id, content, tags) VALUES('delete', ?, '', '')",
             (memory_id,),
+        )
+        # Explicitly prune version history (no FK cascade — versions outlive
+        # the memory row by design, until the memory is explicitly deleted).
+        self.conn.execute(
+            "DELETE FROM memory_versions WHERE memory_id = ?", (memory_id,)
         )
 
     def update(self, memory_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
@@ -291,3 +362,137 @@ class SQLiteBackend:
         d["updatedAt"] = d.pop("updated_at", None)
         d["accessCount"] = d.pop("access_count", 0)
         return d
+
+    # ---- version history (v2.1) ----
+
+    def snapshot_version(self, memory: dict[str, Any]) -> str:
+        """Append a version-history row capturing the memory's *prior* state.
+        Called by MemoryEngine.store_memory() before overwriting an existing memory.
+        Returns the version_id."""
+        import uuid
+        version_id = str(uuid.uuid4())
+        tags_json = json.dumps(memory.get("tags", []), ensure_ascii=False)
+        self.conn.execute(
+            """
+            INSERT INTO memory_versions
+              (version_id, memory_id, content, tags, importance, version_num, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                version_id,
+                memory["id"],
+                memory.get("content", ""),
+                tags_json,
+                int(memory.get("importance", 50)),
+                int(memory.get("version", 1)),
+                memory.get("source", "user"),
+            ),
+        )
+        return version_id
+
+    def get_versions(self, memory_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM memory_versions WHERE memory_id = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (memory_id, int(limit)),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["tags"] = json.loads(d.get("tags") or "[]")
+            except json.JSONDecodeError:
+                d["tags"] = []
+            d["createdAt"] = d.pop("created_at", None)
+            out.append(d)
+        return out
+
+    def get_version(self, version_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM memory_versions WHERE version_id = ?",
+            (version_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["tags"] = json.loads(d.get("tags") or "[]")
+        except json.JSONDecodeError:
+            d["tags"] = []
+        d["createdAt"] = d.pop("created_at", None)
+        return d
+
+    # ---- suggestions (v2.2) ----
+
+    def create_suggestion(
+        self,
+        kind: str,
+        target_ids: list[str],
+        summary: str,
+        payload: dict | None = None,
+    ) -> str:
+        import uuid
+        sid = str(uuid.uuid4())
+        self.conn.execute(
+            """
+            INSERT INTO memory_suggestions
+              (suggestion_id, kind, status, target_ids, summary, payload)
+            VALUES (?, ?, 'open', ?, ?, ?)
+            """,
+            (
+                sid,
+                kind,
+                json.dumps(target_ids, ensure_ascii=False),
+                summary,
+                json.dumps(payload or {}, ensure_ascii=False),
+            ),
+        )
+        return sid
+
+    def list_suggestions(self, status: str = "open", limit: int = 50) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM memory_suggestions WHERE status = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (status, int(limit)),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["target_ids"] = json.loads(d.get("target_ids") or "[]")
+                d["payload"] = json.loads(d.get("payload") or "{}")
+            except json.JSONDecodeError:
+                d["target_ids"] = []
+                d["payload"] = {}
+            d["createdAt"] = d.pop("created_at", None)
+            d["resolvedAt"] = d.pop("resolved_at", None)
+            out.append(d)
+        return out
+
+    def get_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM memory_suggestions WHERE suggestion_id = ?",
+            (suggestion_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["target_ids"] = json.loads(d.get("target_ids") or "[]")
+            d["payload"] = json.loads(d.get("payload") or "{}")
+        except json.JSONDecodeError:
+            d["target_ids"] = []
+            d["payload"] = {}
+        d["createdAt"] = d.pop("created_at", None)
+        d["resolvedAt"] = d.pop("resolved_at", None)
+        return d
+
+    def resolve_suggestion(self, suggestion_id: str, status: str) -> bool:
+        if status not in ("applied", "dismissed"):
+            raise ValueError("status must be 'applied' or 'dismissed'")
+        cur = self.conn.execute(
+            "UPDATE memory_suggestions SET status = ?, resolved_at = ? "
+            "WHERE suggestion_id = ? AND status = 'open'",
+            (status, now_iso(), suggestion_id),
+        )
+        return cur.rowcount > 0

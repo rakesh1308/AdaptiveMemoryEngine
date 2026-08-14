@@ -289,9 +289,16 @@ try:
     tool_names = {t["name"] for t in r["result"]["tools"]}
     expected = {"store_memory", "get_memory", "update_memory", "delete_memory",
                 "search", "list_memories", "query_graph", "get_stats",
-                "backup", "ask", "summarize", "get_provider_info"}
+                "backup", "ask", "summarize", "get_provider_info",
+                # v2.x additions
+                "get_memory_history", "restore_memory_version",
+                "list_suggestions", "apply_suggestion", "dismiss_suggestion",
+                "run_suggestion_scan",
+                "set_active_tags", "clear_active_tags",
+                "export_memories", "import_memories", "import_chat_export",
+                "summarize_memory"}
     if expected.issubset(tool_names):
-        ok(f"tools/list: all {len(expected)} tools present")
+        ok(f"tools/list: all {len(expected)} tools present (incl. v2.x)")
     else:
         fail("tools/list", f"missing: {expected - tool_names}")
 

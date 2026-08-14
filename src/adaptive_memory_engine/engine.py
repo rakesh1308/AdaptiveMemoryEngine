@@ -46,6 +46,8 @@ class MemoryEngine:
         self._memories: dict[str, dict] = {}
         self._initialized = False
         self._lock = threading.Lock()
+        # Per-chat tag scopes — in-memory only, lost on restart (intentional).
+        self._chat_scopes: dict[str, set[str]] = {}
 
     # ---- lifecycle ----
 
@@ -106,6 +108,12 @@ class MemoryEngine:
 
         now = now_iso()
         existing = self.sqlite.get(key)
+        # Snapshot prior state to version history BEFORE overwriting (v2.1)
+        if existing:
+            try:
+                self.sqlite.snapshot_version(existing)
+            except Exception:  # noqa: BLE001
+                log.warning("version snapshot failed for %s", key)
         mem = {
             "id": key,
             "content": content,
@@ -475,3 +483,177 @@ class MemoryEngine:
 
     def shutdown(self) -> None:
         self.close()
+
+    # ---- v2.1: version history ----
+
+    def get_memory_history(self, memory_id: str, limit: int = 50) -> list[dict]:
+        """Return prior versions of a memory (most recent first)."""
+        return self.sqlite.get_versions(memory_id, limit=limit)
+
+    def restore_memory_version(self, memory_id: str, version_id: str) -> dict | None:
+        """Restore a memory to a prior state. The current state is itself
+        snapshotted to history first (so restore is itself reversible)."""
+        version = self.sqlite.get_version(version_id)
+        if not version or version["memory_id"] != memory_id:
+            return None
+        return self.store_memory(
+            memory_id,
+            version["content"],
+            tags=version.get("tags", []),
+            auto_tag=False,
+            source="restore",
+        )
+
+    # ---- v2.2: memory suggestions (dedup / contradiction / stale) ----
+
+    def propose_suggestions(
+        self,
+        limit: int = 100,
+        kinds: list[str] | None = None,
+    ) -> list[dict]:
+        """Inspect all memories and propose dedup / contradiction / stale
+        suggestions. Idempotent — does NOT persist proposals; persistence
+        happens via `record_suggestions` after the caller reviews them.
+        Returns a list of proposal dicts."""
+        memories = self.sqlite.get_all()
+        proposals: list[dict] = []
+        # 1) exact-content duplicates (very cheap, no LLM)
+        seen: dict[str, str] = {}
+        for m in memories:
+            key = (m.get("content") or "").strip().lower()
+            if not key:
+                continue
+            if key in seen:
+                # Keep the lexicographically smaller id as the survivor so
+                # merge semantics are deterministic and idempotent.
+                survivor = min(seen[key], m["id"])
+                other = max(seen[key], m["id"])
+                survivor_mem = next((x for x in memories if x["id"] == survivor), m)
+                proposals.append({
+                    "kind": "duplicate",
+                    "target_ids": [survivor, other],
+                    "summary": f"Exact duplicate of [{survivor}]; consider merging.",
+                    "payload": {
+                        "merged_content": survivor_mem.get("content", ""),
+                        "merged_tags": sorted(set(survivor_mem.get("tags", []) or [])),
+                    },
+                })
+            else:
+                seen[key] = m["id"]
+        # 2) tag-cluster dedup (cheap, no LLM) — memories sharing >=2 tags are candidates
+        from collections import defaultdict
+        tag_clusters: dict[tuple, list[str]] = defaultdict(list)
+        for m in memories:
+            ts = tuple(sorted(set(m.get("tags", []) or [])))
+            if len(ts) >= 2:
+                tag_clusters[ts].append(m["id"])
+        for ts, ids in tag_clusters.items():
+            if len(ids) >= 2:
+                # Survivor = lowest id; others get deleted on apply.
+                proposals.append({
+                    "kind": "merge",
+                    "target_ids": sorted(ids),
+                    "summary": f"{len(ids)} memories share tags {list(ts)}; review for merge.",
+                    "payload": {"shared_tags": list(ts)},
+                })
+        # 3) staleness — memories not accessed in >180 days (if access_log available)
+        try:
+            stale_rows = self.sqlite.conn.execute(
+                """
+                SELECT m.id, m.content, MAX(a.accessed_at) AS last_seen
+                FROM memories m
+                LEFT JOIN access_log a ON a.memory_id = m.id
+                GROUP BY m.id
+                HAVING last_seen IS NULL OR last_seen < datetime('now', '-180 days')
+                LIMIT 20
+                """
+            ).fetchall()
+            for row in stale_rows:
+                proposals.append({
+                    "kind": "stale",
+                    "target_ids": [row["id"]],
+                    "summary": f"Not accessed in 180+ days — still relevant? [{row['id']}]",
+                    "payload": {"last_seen": row["last_seen"], "preview": (row["content"] or "")[:120]},
+                })
+        except Exception:  # noqa: BLE001
+            log.debug("staleness check skipped (access_log missing or query failed)")
+        # Filter by kinds if requested
+        if kinds:
+            proposals = [p for p in proposals if p["kind"] in kinds]
+        return proposals[:limit]
+
+    def record_suggestions(self, proposals: list[dict]) -> list[str]:
+        """Persist a batch of proposals; returns their suggestion_ids."""
+        ids = []
+        for p in proposals:
+            sid = self.sqlite.create_suggestion(
+                kind=p["kind"],
+                target_ids=p.get("target_ids", []),
+                summary=p.get("summary", ""),
+                payload=p.get("payload", {}),
+            )
+            ids.append(sid)
+        return ids
+
+    def list_suggestions(self, status: str = "open", limit: int = 50) -> list[dict]:
+        return self.sqlite.list_suggestions(status=status, limit=limit)
+
+    def apply_suggestion(self, suggestion_id: str) -> dict:
+        """Apply a suggestion's payload against its target memories."""
+        s = self.sqlite.get_suggestion(suggestion_id)
+        if not s:
+            return {"ok": False, "error": "not_found"}
+        if s["status"] != "open":
+            return {"ok": False, "error": f"already_{s['status']}"}
+        kind = s["kind"]
+        targets = s.get("target_ids", [])
+        payload = s.get("payload", {}) or {}
+        result: dict = {"ok": True, "kind": kind, "applied": []}
+        if kind in ("duplicate", "merge"):
+            merged_content = payload.get("merged_content")
+            merged_tags = payload.get("merged_tags", [])
+            if not merged_content and targets:
+                # Fallback: keep the first target's content + union of tags
+                first = self.sqlite.get(targets[0])
+                if first:
+                    merged_content = first.get("content", "")
+            if merged_content and targets:
+                # Update the first target, delete the rest
+                keep = targets[0]
+                self.store_memory(keep, merged_content, tags=merged_tags, auto_tag=False, source="suggestion-merge")
+                result["applied"].append({"id": keep, "action": "updated"})
+                for tid in targets[1:]:
+                    if self.delete_memory(tid):
+                        result["applied"].append({"id": tid, "action": "deleted"})
+        elif kind == "stale":
+            # Stale has no automatic action — mark applied so it disappears from inbox
+            result["applied"].append({"note": "stale suggestions require manual review"})
+        self.sqlite.resolve_suggestion(suggestion_id, "applied")
+        return result
+
+    def dismiss_suggestion(self, suggestion_id: str) -> bool:
+        return self.sqlite.resolve_suggestion(suggestion_id, "dismissed")
+
+    def run_suggestion_scan(self, max_new: int = 20) -> list[dict]:
+        """Convenience: scan, persist, return the new proposals (as stored dicts)."""
+        proposals = self.propose_suggestions(limit=max_new)
+        ids = self.record_suggestions(proposals)
+        return [s for s in self.sqlite.list_suggestions(status="open", limit=len(ids) * 2)
+                if s["suggestion_id"] in ids]
+
+    # ---- v2.3: per-chat tag scoping (in-memory, not persisted) ----
+
+    def set_chat_scope(self, chat_id: str, tags: list[str]) -> None:
+        self._chat_scopes[chat_id] = set(tags or [])
+
+    def clear_chat_scope(self, chat_id: str) -> None:
+        self._chat_scopes.pop(chat_id, None)
+
+    def get_chat_scope(self, chat_id: str) -> set[str]:
+        return self._chat_scopes.get(chat_id, set())
+
+    def _filter_by_scope(self, memories: list[dict], chat_id: str | None) -> list[dict]:
+        scope = self.get_chat_scope(chat_id) if chat_id else set()
+        if not scope:
+            return [m for m in memories if m]
+        return [m for m in memories if m and scope.intersection(m.get("tags", []) or [])]
