@@ -3,6 +3,7 @@
 Make every AI in TypingMind remember you, with **Adaptive Memory Engine** running on your own server.
 
 > Replaces MemoryPlugin.com ($300/yr) with a free, self-hosted equivalent.
+> **No Node.js required** — uses TypingMind's native HTTP Action plugin type.
 
 ---
 
@@ -55,15 +56,26 @@ See [`zeabur-deploy.md`](./zeabur-deploy.md). Once deployed, your MCP URL is `ht
 
 ---
 
-## 2. Install the TypingMind plugin
+## 2. Install the TypingMind plugin (HTTP variant)
+
+**No Node.js required.** The plugin uses TypingMind's native HTTP Action type — works on any browser, any device.
 
 1. Open **TypingMind** → click **Plugins** in the sidebar → **Add Plugin**
 2. Choose **"Import from JSON / link"**
-3. Paste this URL (or the raw JSON from [`data/typingmind-plugin.json`](../data/typingmind-plugin.json)):
+3. Paste one of these:
 
-```
-https://raw.githubusercontent.com/rakesh1308/AdaptiveMemoryEngine/main/data/typingmind-plugin.json
-```
+   **Option 1 — GitHub repo URL** (TypingMind fetches `plugin.json` automatically):
+   ```
+   https://github.com/rakesh1308/AdaptiveMemoryEngine
+   ```
+
+   **Option 2 — direct JSON URL**:
+   ```
+   https://raw.githubusercontent.com/rakesh1308/AdaptiveMemoryEngine/main/plugin.json
+   ```
+
+   **Option 3 — paste JSON** (works always):
+   Open the URL above in your browser, copy all the JSON, then choose **Import via JSON file** in TypingMind.
 
 4. Click **Install**.
 
