@@ -1,13 +1,16 @@
 """SQLite backend — durable storage for memories, embeddings, and access log.
 
 Schema: tables `memories`, `embeddings`, `access_log`, virtual table
-`memories_fts` (FTS5, external-content). PRAGMAs are tuned for local-disk
-durability: `journal_mode=DELETE`, `synchronous=NORMAL`, `locking_mode=NORMAL`.
-Embedding BLOBs are little-endian float32.
+`memories_fts` (FTS5, standalone — NOT external-content). External-content
+tables crash on DELETE in SQLite 3.50.x ("missing row from content table").
+PRAGMAs are tuned for local-disk durability: `journal_mode=DELETE`,
+`synchronous=NORMAL`, `locking_mode=NORMAL`. Embedding BLOBs are little-endian
+float32.
 """
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import struct
 from collections import OrderedDict
@@ -15,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from ..events import now_iso
+
+log = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -50,9 +55,25 @@ CREATE INDEX IF NOT EXISTS idx_memories_updated    ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_access_log_memory   ON access_log(memory_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-  id, content, tags,
-  content='memories', content_rowid='rowid'
+  id, content, tags
 );
+"""
+
+# v2.3.0 migration: rebuild FTS table as non-external-content.
+# Earlier builds used `content='memories', content_rowid='rowid'` (external-content).
+# SQLite 3.50.x raises "missing row from content table" when DELETEing from
+# an external-content FTS, breaking `update_memory` and `delete_memory`.
+# Migration runs once on startup if the old shape is detected.
+_FTS_MIGRATION_DETECT = """
+SELECT sql FROM sqlite_master WHERE type='table' AND name='memories_fts';
+"""
+_FTS_MIGRATION_REBUILD = """
+DROP TABLE IF EXISTS memories_fts_old;
+ALTER TABLE memories_fts RENAME TO memories_fts_old;
+CREATE VIRTUAL TABLE memories_fts USING fts5(id, content, tags);
+INSERT INTO memories_fts(rowid, id, content, tags)
+  SELECT rowid, id, content, '' FROM memories_fts_old;
+DROP TABLE memories_fts_old;
 """
 
 # v2.1.0: version history (every edit snapshots prior state)
@@ -112,6 +133,11 @@ class SQLiteBackend:
         # Idempotent additive migrations
         self._conn.executescript(_SCHEMA_V2)
         self._conn.executescript(_SCHEMA_V3)
+        # v2.3.0 — rebuild FTS as non-external-content if older shape detected
+        row = self._conn.execute(_FTS_MIGRATION_DETECT).fetchone()
+        if row and "content='memories'" in (row["sql"] or ""):
+            log.warning("Migrating memories_fts: external-content → standalone (v2.3.0)")
+            self._conn.executescript(_FTS_MIGRATION_REBUILD)
 
     def close(self) -> None:
         if self._conn is not None:
@@ -177,16 +203,21 @@ class SQLiteBackend:
                     int(memory.get("version", 1)),
                 ),
             )
-        # FTS upsert — match Node's `(memory.tags || []).join(' ')` shape
+        # FTS upsert — match Node's `(memory.tags || []).join(' ')` shape.
+        # Plain (non-external-content) FTS5: plain DELETE + INSERT works
+        # reliably. (External-content tables crash on DELETE in SQLite 3.50.x.)
         tags_space = " ".join(memory.get("tags") or [])
-        self.conn.execute(
-            "INSERT INTO memories_fts(memories_fts, id, content, tags) VALUES('delete', ?, ?, ?)",
-            (memory["id"], memory["content"], tags_space),
-        )
+        row = self.conn.execute(
+            "SELECT rowid FROM memories WHERE id = ?", (memory["id"],)
+        ).fetchone()
+        if row is not None:
+            self.conn.execute(
+                "DELETE FROM memories_fts WHERE rowid = ?", (row["rowid"],)
+            )
         self.conn.execute(
             "INSERT INTO memories_fts(rowid, id, content, tags) "
-            "SELECT rowid, id, content, tags FROM memories WHERE id = ?",
-            (memory["id"],),
+            "SELECT rowid, id, content, ? FROM memories WHERE id = ?",
+            (tags_space, memory["id"]),
         )
 
     def get(self, memory_id: str) -> dict[str, Any] | None:
@@ -202,12 +233,16 @@ class SQLiteBackend:
         return [self._row_to_memory(r) for r in rows]
 
     def delete(self, memory_id: str) -> None:
-        # FK cascades remove embeddings + access_log
+        # Plain FTS5: plain DELETE works (external-content had bugs in 3.50.x).
+        row = self.conn.execute(
+            "SELECT rowid FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if row is not None:
+            self.conn.execute(
+                "DELETE FROM memories_fts WHERE rowid = ?", (row["rowid"],)
+            )
+        # FK cascades remove embeddings + access_log.
         self.conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-        self.conn.execute(
-            "INSERT INTO memories_fts(memories_fts, id, content, tags) VALUES('delete', ?, '', '')",
-            (memory_id,),
-        )
         # Explicitly prune version history (no FK cascade — versions outlive
         # the memory row by design, until the memory is explicitly deleted).
         self.conn.execute(
@@ -244,18 +279,16 @@ class SQLiteBackend:
             refreshed = self.get(memory_id)
             if refreshed:
                 tags_space = " ".join(refreshed.get("tags") or [])
-                self.conn.execute(
-                    "INSERT INTO memories_fts(memories_fts, id, content, tags) VALUES('delete', ?, '', '')",
-                    (memory_id,),
-                )
+                row = self.conn.execute(
+                    "SELECT rowid FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+                if row is not None:
+                    self.conn.execute(
+                        "DELETE FROM memories_fts WHERE rowid = ?", (row["rowid"],)
+                    )
                 self.conn.execute(
                     "INSERT INTO memories_fts(rowid, id, content, tags) "
-                    "SELECT rowid, id, content, tags FROM memories WHERE id = ?",
-                    (memory_id,),
-                )
-                # ensure tags index uses space-separated
-                self.conn.execute(
-                    "UPDATE memories_fts SET tags = ? WHERE id = ?",
+                    "SELECT rowid, id, content, ? FROM memories WHERE id = ?",
                     (tags_space, memory_id),
                 )
         return self.get(memory_id)
