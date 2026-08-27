@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Secrets / local config
+.env
+.env.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.log
+
+# Live memory state (do NOT commit personal memories)
+data/memories.db
+data/memories.db-*
+data/knowledge-graph.json
+data/graph-state.json
+data/snapshots/
+
+# Agent / tool scratch dirs
+.claude/
+.kilo/

@@ -1,0 +1,83 @@
+[project]
+name = "adaptive-memory-engine"
+version = "3.0.0"
+description = "A RAG (Retrieval-Augmented Generation) memory layer for AI assistants, powered by OpenAI embeddings and the Model Context Protocol."
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Rakesh Sonawane" }]
+keywords = ["rag", "memory", "mcp", "openai", "embeddings", "knowledge-graph", "semantic-search"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+]
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "anyio>=4.0.0",
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.16.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+adaptive-memory-server = "adaptive_memory_engine.server:serve"
+adaptive-memory-migrate = "adaptive_memory_engine.migration:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+adaptive_memory_engine = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = ["postgres: requires a disposable PostgreSQL/pgvector database"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = ["tests/pre_deploy.py", "tests/*_smoke.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM"]
+ignore = [
+    "S101", # assertions are valid in tests and internal invariants
+    "S104", # the production HTTP server intentionally binds all interfaces
+    "S311", # jitter is not used for cryptographic purposes
+    "S608", # UPDATE columns come exclusively from a fixed allowlist
+    "E501", # formatter preserves long MCP descriptions for client readability
+    "S110", # provider JSON parsing intentionally falls back to safe heuristic output
+]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["tests"]
+
+[[tool.mypy.overrides]]
+module = ["pgvector.*", "psycopg.*", "psycopg_pool.*"]
+follow_imports = "skip"
+ignore_missing_imports = true

@@ -1,0 +1,12 @@
+.git
+.github
+.claude
+.kilo
+.venv
+__pycache__
+*.py[cod]
+*.log
+.env
+data
+tests
+docs
