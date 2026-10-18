@@ -91,7 +91,7 @@ def test_model_change_reembeds(tmp_path):
 def test_list_and_tag_filter(store):
     store.store("a", "one", ["t1"])
     store.store("b", "two", ["t2"])
-    assert [m["key"] for m in store.list(tag="t1")] == ["a"]
+    assert [m["key"] for m in store.list_memories(tag="t1")] == ["a"]
     assert len(store.export()) == 2
 
 

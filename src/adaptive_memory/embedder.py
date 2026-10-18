@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 
@@ -11,8 +10,6 @@ import numpy as np
 # Keep the MCP stdio stream quiet: no progress bars or symlink warnings on first download.
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BAR", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
-
-log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"  # 384 dims, ~130 MB
 MAX_CHARS = 2000  # the model reads ~512 tokens; keyword search still covers the full text

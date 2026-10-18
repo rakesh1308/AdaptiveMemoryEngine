@@ -12,11 +12,14 @@ No API key, no account, no server, no Docker.
 Requires Python 3.10+.
 
 ```bash
-pip install git+https://github.com/rakesh1308/AdaptiveMemoryEngine.git
+pip install adaptive-memory
 adaptive-memory warmup   # optional: downloads the ~130 MB embedding model now, once
 ```
 
 Check it works: `adaptive-memory stats` should print a JSON summary.
+
+Prefer not to install anything globally? With [uv](https://docs.astral.sh/uv/), point your agent at
+`uvx adaptive-memory` instead of `adaptive-memory`.
 
 ### Claude Code
 

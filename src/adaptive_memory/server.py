@@ -46,7 +46,7 @@ def register_tools(mcp, store: MemoryStore) -> None:
 
     @mcp.tool(name="list_memories", description="List recent memories, optionally by tag.")
     def list_memories(tag: str | None = None, limit: int = 50) -> str:
-        items = store.list(tag, max(1, min(limit, 200)))
+        items = store.list_memories(tag, max(1, min(limit, 200)))
         return "\n".join(_fmt(m, full=False) for m in items) or "No memories yet."
 
     @mcp.tool(name="delete_memory", description="Delete a memory by key.")

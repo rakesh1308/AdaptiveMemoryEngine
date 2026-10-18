@@ -156,7 +156,7 @@ class MemoryStore:
             r = self._db.execute("SELECT * FROM memories WHERE key=?", (key,)).fetchone()
         return _row(r) if r else None
 
-    def list(self, tag: str | None = None, limit: int = 50) -> list[dict]:
+    def list_memories(self, tag: str | None = None, limit: int = 50) -> list[dict]:
         with self._lock:
             rows = self._db.execute(
                 "SELECT * FROM memories ORDER BY updated_at DESC"
@@ -205,7 +205,7 @@ class MemoryStore:
         }
 
     def export(self) -> list[dict]:
-        return self.list(limit=10**9)
+        return self.list_memories(limit=10**9)
 
     # ---- internals ----
 
@@ -240,10 +240,6 @@ class MemoryStore:
             index = {k: i for i, k in enumerate(keys)}
             out.update({k: float(sims[index[k]]) for k in extra if k in index})
         return out
-
-    def _semantic_keys(self, query: str, limit: int) -> list[str] | None:
-        sims = self._similarities(query, limit)
-        return None if sims is None else sorted(sims, key=sims.get, reverse=True)
 
     def _vector_matrix(self) -> tuple[list[str], np.ndarray]:
         """All vectors for the current model, cached until the database changes

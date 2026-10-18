@@ -66,7 +66,7 @@ def evaluate(embedder: Embedder) -> dict[str, tuple[float, float]]:
     out = {}
     for label, q in (("paraphrase", DATA["queries"]), ("exact", DATA["exact_queries"])):
         out[f"{label}/keyword"] = score(lambda s: store._keyword_keys(s, 5), q)
-        out[f"{label}/semantic"] = score(lambda s: store._semantic_keys(s, 5) or [], q)
+        out[f"{label}/semantic"] = score(lambda s: sorted(sims, key=sims.get, reverse=True) if (sims := store._similarities(s, 5)) else [], q)
         out[f"{label}/hybrid"] = score(lambda s: [m["key"] for m in store.search(s, 5)[0]], q)
     store.close()
     return out
