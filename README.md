@@ -12,9 +12,11 @@ No API key, no account, no server, no Docker.
 Requires Python 3.10+.
 
 ```bash
-pip install adaptive-memory
+pip install git+https://github.com/rakesh1308/AdaptiveMemoryEngine.git
 adaptive-memory warmup   # optional: downloads the ~130 MB embedding model now, once
 ```
+
+Check it works: `adaptive-memory stats` should print a JSON summary.
 
 ### Claude Code
 
@@ -34,8 +36,19 @@ Add to your MCP config:
 }
 ```
 
-Then install the included skill (`skill/adaptive-memory/SKILL.md`) so your agent knows
-when to remember and when to search.
+If your agent can't find the `adaptive-memory` command, use the full Python path instead:
+`"command": "python", "args": ["-m", "adaptive_memory"]`.
+
+### Teach your agent when to use it (optional but recommended)
+
+Copy `skill/adaptive-memory/SKILL.md` into your agent's skills folder, for example
+`~/.claude/skills/adaptive-memory/SKILL.md` for Claude Code. It tells the agent when to
+search, what to store, and what never to store.
+
+### Try it
+
+Restart your agent, then say: *"Remember that we use PostgreSQL for the main database."*
+In a later session ask: *"Which database do we use?"*
 
 ## Tools
 
