@@ -1,6 +1,6 @@
 [project]
 name = "adaptive-memory"
-version = "4.0.0"
+version = "4.1.0"
 description = "Private, local memory for your coding agents. One file, no cloud, no API key."
 readme = "README.md"
 requires-python = ">=3.10"

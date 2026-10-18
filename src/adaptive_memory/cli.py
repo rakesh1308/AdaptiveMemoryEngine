@@ -7,9 +7,10 @@ import sys
 
 from .store import MemoryStore
 
-USAGE = """adaptive-memory [serve|warmup|stats|export]
+USAGE = """adaptive-memory [serve|serve-http|warmup|stats|export]
 
   serve    run the MCP server over stdio (default)
+  serve-http  remote mode: MCP over HTTP, needs ADAPTIVE_MEMORY_TOKEN (--host, --port)
   warmup   download the embedding model now (~130 MB, first time only)
   stats    show memory count and database location
   export   print all memories as JSON
@@ -22,6 +23,10 @@ def main() -> None:
         from .server import main as serve
 
         serve()
+    elif cmd == "serve-http":
+        from .http import main as serve_http
+
+        serve_http(sys.argv[2:])
     elif cmd == "warmup":
         store = MemoryStore()
         store.embedder.embed(["warmup"])

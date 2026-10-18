@@ -117,6 +117,32 @@ multiply. Measured median search time (384-dim vectors, 8-word memories):
 A coding agent writes hundreds or low thousands of memories. Postgres + pgvector only
 pays off with millions of memories or many users sharing one server.
 
+## Remote use (optional)
+
+The default is local and private. If you want one memory shared across machines, or want to use
+it from claude.ai as a custom connector, run the HTTP mode on a small server:
+
+```bash
+export ADAPTIVE_MEMORY_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+adaptive-memory serve-http --host 0.0.0.0 --port 8000
+```
+
+- Endpoint: `https://your-host/mcp`, with header `Authorization: Bearer <token>`.
+- The token is required (at least 24 characters); the server refuses to start without it.
+- Put it behind HTTPS (a reverse proxy such as Caddy, or your host's built-in TLS). Never
+  expose plain HTTP to the internet.
+- One server holds one person's memories (single user). Keep `~/.adaptive-memory` on a
+  persistent disk.
+- Note this trades away the "nothing leaves your machine" guarantee: your memories now live on that server.
+
+Client config, for agents that support HTTP MCP servers:
+
+```json
+{ "mcpServers": { "adaptive-memory": {
+  "url": "https://your-host/mcp",
+  "headers": { "Authorization": "Bearer <token>" } } } }
+```
+
 ## Works where
 
 Agents that run on your machine and can start a local process: Claude Code, Cursor, Windsurf,

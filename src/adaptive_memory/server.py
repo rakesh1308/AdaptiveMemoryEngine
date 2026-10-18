@@ -62,12 +62,12 @@ def register_tools(mcp, store: MemoryStore) -> None:
         return json.dumps(store.export(), indent=2)
 
 
-def build_server(store: MemoryStore | None = None):
+def build_server(store: MemoryStore | None = None, **server_kwargs):
     try:
         from mcp.server.fastmcp import FastMCP as Server  # mcp 1.x
     except ImportError:
         from mcp.server.mcpserver import MCPServer as Server  # mcp 2.x
-    mcp = Server(name=NAME)
+    mcp = Server(name=NAME, **server_kwargs)
     register_tools(mcp, store or MemoryStore())
     return mcp
 
