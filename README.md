@@ -1,6 +1,6 @@
 # Adaptive Memory
 
-**Private, local memory for your coding agents. Pay once. No subscription, no cloud.**
+**Private, local memory for your coding agents. Free and open source. No cloud, no API key.**
 
 Adaptive Memory is an MCP server that gives Claude Code, Cursor, Windsurf, Cline and other
 local agents a long-term memory. Memories live in one SQLite file on your machine. Search is
@@ -69,6 +69,38 @@ To back up, copy the database file or run `adaptive-memory export > backup.json`
 - Brute-force vector search is fast up to tens of thousands of memories, which is far more
   than a coding agent will write.
 
+## How good is the search?
+
+`study/eval_embeddings.py` scores retrieval on 20 memories, 20 paraphrased questions
+(no shared wording, e.g. "who signs off schema changes?" for "Priya approves all database
+migrations") and 10 exact-term queries. Top-1 accuracy:
+
+| Embedding model (all run locally) | Paraphrase | Exact terms |
+|---|---|---|
+| `BAAI/bge-small-en-v1.5` (default, 130 MB) | 85-90% | 100% |
+| `sentence-transformers/all-MiniLM-L6-v2` | 90% | 100% |
+| `BAAI/bge-base-en-v1.5` | 90% | 100% |
+| Keyword search only | 45% | n/a |
+
+Set `OPENAI_API_KEY` and rerun the script to add OpenAI `text-embedding-3-small` to the table.
+The set is small, so treat the numbers as a sanity check, not a benchmark.
+Switch models with `ADAPTIVE_MEMORY_MODEL`; memories are re-embedded automatically.
+
+## Is SQLite enough? (Do I need Postgres?)
+
+Yes for this use. Search keeps all vectors in memory and compares them with one matrix
+multiply. Measured median search time (384-dim vectors, 8-word memories):
+
+| Memories | Search time | Database size |
+|---|---|---|
+| 1,000 | 2 ms | < 1 MB |
+| 10,000 | 20 ms | 22 MB |
+| 50,000 | 130 ms | 111 MB |
+| 100,000 | 260 ms | 221 MB |
+
+A coding agent writes hundreds or low thousands of memories. Postgres + pgvector only
+pays off with millions of memories or many users sharing one server.
+
 ## Works where
 
 Agents that run on your machine and can start a local process: Claude Code, Cursor, Windsurf,
@@ -80,10 +112,6 @@ phone apps, which can't reach a process on your computer.
 Memories never leave your device. The only network call is the one-time model download from
 Hugging Face. Do not store passwords or API keys in memory.
 
-## Previous version
-
-Version 3.x (OpenAI + Postgres) is preserved under the `v3.0.0-legacy` tag and remains MIT.
-
 ## License
 
-See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).

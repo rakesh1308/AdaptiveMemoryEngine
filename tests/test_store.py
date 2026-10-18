@@ -93,3 +93,14 @@ def test_list_and_tag_filter(store):
     store.store("b", "two", ["t2"])
     assert [m["key"] for m in store.list(tag="t1")] == ["a"]
     assert len(store.export()) == 2
+
+
+def test_cache_sees_writes_from_another_process(tmp_path):
+    a = MemoryStore(tmp_path / "m.db", FakeEmbedder())
+    b = MemoryStore(tmp_path / "m.db", FakeEmbedder())
+    a.store("one", "postgres vector search")
+    assert a.search("postgres")[0][0]["key"] == "one"  # warms a's cache
+    b.store("two", "postgres postgres postgres")  # written by the other connection
+    assert {m["key"] for m in a.search("postgres", 5)[0]} == {"one", "two"}
+    a.close()
+    b.close()

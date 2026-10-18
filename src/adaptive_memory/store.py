@@ -22,6 +22,15 @@ log = logging.getLogger(__name__)
 MAX_CONTENT = 20_000  # characters; memories are short facts, not documents
 MAX_KEY = 200
 
+# Question words and glue words match almost every memory; they must not drive keyword search.
+STOPWORDS = frozenset(
+    "a an the and or but if of to in on at by for with from as is are was were be been being do does "
+    "did how what which who whom whose when where why we our us you your i me my it its this that "
+    "these those can could should would will shall may might not no so than then there their they "
+    "them he she his her has have had about into over under up down out".split()
+)
+KEYWORD_BONUS = 0.005  # tie-break only: larger bonuses lowered paraphrase accuracy in study/eval_embeddings.py
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
   key        TEXT PRIMARY KEY,
@@ -71,6 +80,7 @@ class MemoryStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.embedder = embedder or Embedder()
         self._lock = threading.RLock()
+        self._cache: tuple | None = None
         self._db = sqlite3.connect(self.path, check_same_thread=False, timeout=30, isolation_level=None)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys=ON")
@@ -105,6 +115,7 @@ class MemoryStore:
                 self._db.execute("ROLLBACK")
                 raise
             self._db.execute("COMMIT")
+            self._cache = None
 
     # ---- writes ----
 
@@ -156,18 +167,20 @@ class MemoryStore:
         return items[:limit]
 
     def search(self, query: str, limit: int = 5) -> tuple[list[dict], str]:
-        """Hybrid search. Returns (results, mode) where mode is 'hybrid' or 'keyword'."""
+        """Hybrid search. Returns (results, mode) where mode is 'hybrid' or 'keyword'.
+
+        Score = cosine similarity (meaning) + a small bonus for keyword hits (exact terms).
+        Similarity leads; keywords break ties and rescue exact matches such as names or ids.
+        """
         if not query.strip():
             return [], "keyword"
-        scores: dict[str, float] = {}
-        for rank, key in enumerate(self._keyword_keys(query, limit * 4)):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (60 + rank)
-        mode = "keyword"
-        semantic = self._semantic_keys(query, limit * 4)
-        if semantic is not None:
-            mode = "hybrid"
-            for rank, key in enumerate(semantic):
-                scores[key] = scores.get(key, 0.0) + 1.0 / (60 + rank)
+        kw = self._keyword_keys(query, limit * 4)
+        bonus = {key: KEYWORD_BONUS / (1 + rank) for rank, key in enumerate(kw)}
+        sims = self._similarities(query, limit * 4, extra=kw)
+        mode = "hybrid"
+        if sims is None:
+            mode, sims = "keyword", {}
+        scores = {k: sims.get(k, 0.0) + bonus.get(k, 0.0) for k in set(sims) | set(bonus)}
         out = []
         for key in sorted(scores, key=scores.get, reverse=True)[:limit]:
             m = self.get(key)
@@ -197,7 +210,7 @@ class MemoryStore:
     # ---- internals ----
 
     def _keyword_keys(self, query: str, limit: int) -> list[str]:
-        terms = re.findall(r"\w+", query.lower())
+        terms = [t for t in re.findall(r"\w+", query.lower()) if t not in STOPWORDS]
         if not terms:
             return []
         match = " OR ".join(f'"{t}"' for t in terms)
@@ -208,22 +221,47 @@ class MemoryStore:
             ).fetchall()
         return [r["key"] for r in rows]
 
-    def _semantic_keys(self, query: str, limit: int) -> list[str] | None:
+    def _similarities(self, query: str, limit: int, extra: list[str] = ()) -> dict[str, float] | None:
+        """Cosine similarity of the query to the top `limit` memories (plus `extra` keys).
+        Returns None when the embedding model is unavailable."""
         try:
             self._embed_missing()
             q = self.embedder.embed([query])[0]
         except Exception as e:  # noqa: BLE001 - never let embeddings break search
             log.warning("semantic search unavailable, using keyword only: %s", e)
             return None
+        keys, matrix = self._vector_matrix()
+        if not keys:
+            return {}
+        sims = matrix @ q
+        top = np.argsort(-sims)[:limit]
+        out = {keys[i]: float(sims[i]) for i in top}
+        if extra:
+            index = {k: i for i, k in enumerate(keys)}
+            out.update({k: float(sims[index[k]]) for k in extra if k in index})
+        return out
+
+    def _semantic_keys(self, query: str, limit: int) -> list[str] | None:
+        sims = self._similarities(query, limit)
+        return None if sims is None else sorted(sims, key=sims.get, reverse=True)
+
+    def _vector_matrix(self) -> tuple[list[str], np.ndarray]:
+        """All vectors for the current model, cached until the database changes
+        (data_version bumps on commits from other processes; own writes clear it directly)."""
         with self._lock:
-            rows = self._db.execute(
-                "SELECT key, vec FROM vectors WHERE model=?", (self.embedder.model,)
-            ).fetchall()
-        if not rows:
-            return []
-        matrix = np.vstack([np.frombuffer(r["vec"], dtype=np.float32) for r in rows])
-        order = np.argsort(-(matrix @ q))[:limit]
-        return [rows[i]["key"] for i in order]
+            stamp = (self.embedder.model, self._db.execute("PRAGMA data_version").fetchone()[0])
+            if self._cache is None or self._cache[0] != stamp:
+                rows = self._db.execute(
+                    "SELECT key, vec FROM vectors WHERE model=?", (self.embedder.model,)
+                ).fetchall()
+                keys = [r["key"] for r in rows]
+                matrix = (
+                    np.vstack([np.frombuffer(r["vec"], dtype=np.float32) for r in rows])
+                    if rows
+                    else np.empty((0, 0), dtype=np.float32)
+                )
+                self._cache = (stamp, keys, matrix)
+            return self._cache[1], self._cache[2]
 
     def _embed_missing(self, only: list[str] | None = None) -> None:
         """Embed memories that have no vector for the current model (new, or model changed)."""

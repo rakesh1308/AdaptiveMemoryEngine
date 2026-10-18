@@ -1,0 +1,148 @@
+{
+  "facts": {
+    "db/choice": "We chose PostgreSQL with pgvector because we need vector similarity search",
+    "auth/tokens": "Login uses JWT access tokens that expire after 15 minutes plus refresh tokens",
+    "ui/theme": "The app uses a dark theme with teal as the primary accent colour",
+    "deploy/host": "Production runs on Fly.io in the Mumbai region with two machines",
+    "team/lead": "Priya is the tech lead and approves all database migrations",
+    "ci/tests": "CI runs pytest and ruff on every pull request using GitHub Actions",
+    "prefs/editor": "User prefers vim keybindings and tabs over spaces",
+    "bug/timeout": "Checkout requests time out when the payment gateway takes more than 10 seconds",
+    "api/ratelimit": "The public API allows 100 requests per minute per API key before returning 429",
+    "cache/redis": "Session data and hot lookups are cached in Redis with a five minute TTL",
+    "mobile/min": "The Android app supports API level 26 and above, older devices are dropped",
+    "privacy/logs": "Request logs are scrubbed of email addresses and kept for 30 days",
+    "release/cadence": "We ship a release every second Tuesday and hotfixes any day",
+    "perf/budget": "The home page must render in under two seconds on a mid-range phone",
+    "search/engine": "Full text search is handled by SQLite FTS5 so no separate search server is needed",
+    "backup/policy": "The database is snapshotted nightly at 2am and snapshots are kept for a week",
+    "style/python": "Python code is formatted with ruff and uses type hints on public functions",
+    "oncall/rota": "On-call rotates weekly between four engineers and the pager is handled by PagerDuty",
+    "feature/flags": "New features are hidden behind flags and rolled out to ten percent of users first",
+    "docs/location": "Architecture decisions are written as short records in the docs/adr folder"
+  },
+  "exact_queries": [
+    [
+      "Priya",
+      "team/lead"
+    ],
+    [
+      "429",
+      "api/ratelimit"
+    ],
+    [
+      "PagerDuty",
+      "oncall/rota"
+    ],
+    [
+      "FTS5",
+      "search/engine"
+    ],
+    [
+      "ruff",
+      "style/python"
+    ],
+    [
+      "Redis TTL",
+      "cache/redis"
+    ],
+    [
+      "Fly.io",
+      "deploy/host"
+    ],
+    [
+      "pgvector",
+      "db/choice"
+    ],
+    [
+      "API level 26",
+      "mobile/min"
+    ],
+    [
+      "JWT",
+      "auth/tokens"
+    ]
+  ],
+  "queries": [
+    [
+      "which database did we pick?",
+      "db/choice"
+    ],
+    [
+      "how long until a user must sign in again?",
+      "auth/tokens"
+    ],
+    [
+      "what colours does the interface use?",
+      "ui/theme"
+    ],
+    [
+      "where is the app hosted?",
+      "deploy/host"
+    ],
+    [
+      "who signs off schema changes?",
+      "team/lead"
+    ],
+    [
+      "how do we validate pull requests automatically?",
+      "ci/tests"
+    ],
+    [
+      "what editor settings does the user like?",
+      "prefs/editor"
+    ],
+    [
+      "why does paying sometimes fail?",
+      "bug/timeout"
+    ],
+    [
+      "how many calls can a client make before being throttled?",
+      "api/ratelimit"
+    ],
+    [
+      "what do we use to speed up repeated lookups?",
+      "cache/redis"
+    ],
+    [
+      "which phones can run our app?",
+      "mobile/min"
+    ],
+    [
+      "how do we protect personal data in logs?",
+      "privacy/logs"
+    ],
+    [
+      "how often do we deploy?",
+      "release/cadence"
+    ],
+    [
+      "how fast should the landing page load?",
+      "perf/budget"
+    ],
+    [
+      "do we run a dedicated search service?",
+      "search/engine"
+    ],
+    [
+      "how often is data backed up?",
+      "backup/policy"
+    ],
+    [
+      "what code formatter do we use?",
+      "style/python"
+    ],
+    [
+      "who gets paged when production breaks?",
+      "oncall/rota"
+    ],
+    [
+      "how do we release gradually to a small audience?",
+      "feature/flags"
+    ],
+    [
+      "where do design decisions get recorded?",
+      "docs/location"
+    ]
+  ]
+}
