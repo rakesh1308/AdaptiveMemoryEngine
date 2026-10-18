@@ -1,0 +1,24 @@
+Adaptive Memory License v1.0
+
+Copyright (c) 2026 Rakesh Sonawane. All rights reserved.
+
+1. Grant. On purchase, you receive a non-exclusive, non-transferable, perpetual
+   license to install and use this software on any number of your own devices,
+   for yourself, for personal or commercial work. One license per person.
+
+2. Restrictions. You may not: (a) redistribute, resell, sublicense or share the
+   software or its source with others; (b) offer it as a hosted or managed
+   service; (c) remove this notice.
+
+3. Your data. All memories are stored on your device. The software makes no
+   network calls except a one-time download of the open-source embedding model
+   from Hugging Face on first use.
+
+4. Updates. Updates to the 4.x line are included. Future major versions may be
+   sold separately.
+
+5. No warranty. The software is provided "as is", without warranty of any kind.
+   The author is not liable for any damages arising from its use.
+
+6. Previous versions. Adaptive Memory Engine 3.x (tag v3.0.0-legacy) was released
+   under the MIT License and remains available under those terms.

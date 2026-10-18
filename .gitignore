@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+
+# Local config, personal data, scratch
+.env
+*.db
+*.db-*
+data/
+.claude/
+.kilo/
+.idea/
+.vscode/
+.DS_Store
